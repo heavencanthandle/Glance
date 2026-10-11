@@ -83,7 +83,10 @@ class LockscreenPanel(private val service: AccessibilityService) :
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             // Read afresh on every wake, so the panel is never older than the last look.
-            if (intent.action == Intent.ACTION_SCREEN_ON) readAll()
+            if (intent.action == Intent.ACTION_SCREEN_ON) {
+                readAll()
+                bringUpToDate()
+            }
             // A new look at the lock screen: whether its items can be read is learned afresh.
             if (intent.action == Intent.ACTION_SCREEN_OFF) sawLockScreen = false
             evaluate()
@@ -146,6 +149,25 @@ class LockscreenPanel(private val service: AccessibilityService) :
                 Glance.readAll(service)
             }
             evaluate()
+        }
+    }
+
+    /**
+     * Asks each app whose lines may be out of date (the weather) to bring them up to date, and
+     * waits while it does. An app out of sight loses the network moments after answering, so
+     * one left to fetch on its own never finishes; while Glance is waiting on it, it keeps it.
+     * The new lines arrive as a change, and are read then.
+     */
+    private fun bringUpToDate() {
+        val s = scope ?: return
+        s.launch(Dispatchers.IO) {
+            Glance.REFRESHED.forEach { pkg ->
+                try {
+                    service.contentResolver.call(Glance.uri(pkg), "refresh", null, null)
+                } catch (_: Exception) {
+                    // Not installed, or too old to know the question: its lines stay as they were.
+                }
+            }
         }
     }
 

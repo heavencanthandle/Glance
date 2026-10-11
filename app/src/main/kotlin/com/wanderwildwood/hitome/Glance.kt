@@ -88,6 +88,9 @@ object Glance {
 
     const val SKY = "com.wanderwildwood.soramoyo"
 
+    /** Apps that fetch their lines from elsewhere, and are asked to bring them up to date on each wake. */
+    val REFRESHED = listOf(SKY)
+
     /**
      * The counts as one part of the order: Messaging's and Email's unread, and other apps'
      * notifications under them. They share the foot of the panel, so they move together.
