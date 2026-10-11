@@ -193,7 +193,7 @@ private fun MainScreen() {
             )
         },
     ) { padding ->
-        LazyColumnMMD(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
+        LazyColumnMMD(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), isScrollbarVisible = false) {
             item { Spacer(Modifier.height(8.dp)) }
             // Said only while there is something to do about it.
             if (!serviceOn) {
@@ -326,7 +326,7 @@ private fun OrderScreen(keys: List<String>, onMove: (String, Int) -> Unit, onBac
             )
         },
     ) { padding ->
-        LazyColumnMMD(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
+        LazyColumnMMD(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), isScrollbarVisible = false) {
             item {
                 TextMMD(
                     text = stringResource(R.string.order_page_note),
@@ -459,7 +459,7 @@ private fun ChooseAppsScreen(onBack: () -> Unit) {
             )
         },
     ) { padding ->
-        LazyColumnMMD(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
+        LazyColumnMMD(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), isScrollbarVisible = false) {
             apps.forEach { (pkg, label) ->
                 item(key = pkg) {
                     val on = pkg in chosen
