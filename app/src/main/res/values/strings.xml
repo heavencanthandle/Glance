@@ -9,7 +9,7 @@
     <string name="service_off_note">Turn on Glance in Accessibility. It also needs a screen lock, even just Swipe.</string>
     <string name="service_on">The panel is on</string>
     <string name="service_on_note">It shows on the lock screen. Turn it off in Accessibility.</string>
-    <string name="sources_heading">What it shows</string>
+    <string name="sources_heading">On the lock screen</string>
     <string name="source_field_kit">Field Kit: the emergency card</string>
     <string name="source_calendar">Calendar: today\'s events</string>
     <string name="source_medicine">Medicine: the next dose</string>
@@ -42,11 +42,18 @@
     <string name="sources_note">Each is switched on or off in that app\'s own settings. Hold one and drag it to change the order, or hold and let go to move it up or down. When there is not room for all of them, the ones at the top are shown.</string>
     <string name="unread_together">These two and other apps\' counts move together.</string>
     <!-- The title of the Move up / Move down menu for the Messaging and Email row -->
-    <string name="unread_title">What is unread</string>
+    <string name="unread_title">Unread: Messaging, Email and other apps</string>
+    <string name="order_title">Order</string>
+    <string name="order_note">The top ones are shown when there is not room for all</string>
+    <string name="order_page_note">When there is not room on the lock screen for all of them, the ones at the top are shown.</string>
+    <string name="own_settings_note">Calendar, Sky, Messaging and Email are switched on or off in their own settings.</string>
+    <string name="not_installed">Not installed: %1$s</string>
+    <string name="access_title">Notification access</string>
+    <string name="access_on_short">On: other apps\' notifications are counted.</string>
     <string name="move_top">Move to top</string>
     <string name="move_up">Move up</string>
     <string name="move_down">Move down</string>
-    <string name="others_heading">Other apps</string>
+    <string name="others_heading">Other apps\' notifications</string>
     <string name="access_off">Notifications are not counted</string>
     <string name="access_off_note">Turn on notification access for Glance to count other apps\' notifications.</string>
     <string name="access_on">Notifications are counted</string>

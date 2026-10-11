@@ -32,31 +32,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.semantics
-import com.mudita.mmd.components.buttons.OutlinedButtonMMD
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.mudita.mmd.ThemeMMD
+import com.mudita.mmd.components.divider.HorizontalDividerMMD
 import com.mudita.mmd.components.lazy.LazyColumnMMD
+import androidx.compose.ui.text.font.FontWeight
 import com.mudita.mmd.components.switcher.SwitchMMD
 import com.mudita.mmd.components.text.TextMMD
 import com.mudita.mmd.components.top_app_bar.TopAppBarMMD
 import com.wanderwildwood.hitome.ui.AboutDialog
 import com.wanderwildwood.hitome.ui.BarButton
-import com.wanderwildwood.hitome.ui.EInkDialog
-import com.wanderwildwood.hitome.ui.holdToMove
 import com.wanderwildwood.hitome.ui.GlancePanel
 import com.wanderwildwood.hitome.ui.Icons
 import com.wanderwildwood.hitome.ui.monochrome
@@ -114,88 +102,18 @@ private fun MainScreen() {
     }
 
     var order by remember { mutableStateOf(Glance.order(context)) }
-    val list = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    // Where the list is and the turn under way: read while carrying, never drawn from.
-    val listAt = remember { arrayOfNulls<LayoutCoordinates>(1) }
-    val scrolling = remember { arrayOfNulls<Job>(1) }
-    var carrying by remember { mutableStateOf<String?>(null) }
-    var menuFor by remember { mutableStateOf<String?>(null) }
-    val rows = remember { mutableMapOf<String, LayoutCoordinates>() }
-    val moveTopLabel = stringResource(R.string.move_top)
-    val moveUpLabel = stringResource(R.string.move_up)
-    val moveDownLabel = stringResource(R.string.move_down)
+    var ordering by remember { mutableStateOf(false) }
 
     // A newer source without its app is not listed, and is stepped over when moving.
     fun listed(key: String) = key !in Glance.OPT_IN || installed[key] == true
 
-    /** Moves [key] past the row the finger at [y] has crossed the middle of, one row at a time. */
-    fun carryTo(key: String, y: Float) {
-        val shown = order.filter { listed(it) }
-        val at = shown.indexOf(key)
-        fun middle(k: String?) = k?.let { rows[it] }?.takeIf { it.isAttached }?.boundsInWindow()?.center?.y
-        val below = shown.getOrNull(at + 1)
-        val above = shown.getOrNull(at - 1)
-        val next = when {
-            middle(below)?.let { y > it } == true -> below
-            middle(above)?.let { y < it } == true -> above
-            else -> null
-        }
-        if (next != null) {
-            // Moved above the row the list holds at its top: the list keeps that row where it
-            // is, so it is brought back down into sight.
-            val top = list.layoutInfo.visibleItemsInfo.firstOrNull()?.key
-            order = Glance.moved(order, order.indexOf(key), order.indexOf(next))
-            if (next == above && next == top) {
-                val height = rows[key]?.size?.height ?: 0
-                scope.launch { list.scrollBy(-height.toFloat()) }
-            }
-            return
-        }
-        // Held at the top or foot of the list: it turns a row on, one step per movement.
-        val bounds = listAt[0]?.takeIf { it.isAttached }?.boundsInWindow() ?: return
-        val edge = 48 * context.resources.displayMetrics.density
-        val by = when {
-            y < bounds.top + edge && list.canScrollBackward -> -1
-            y > bounds.bottom - edge && list.canScrollForward -> 1
-            else -> return
-        }
-        if (scrolling[0]?.isActive == true) return
-        val step = (rows[key]?.size?.height ?: 0).toFloat()
-        scrolling[0] = scope.launch { list.scrollBy(by * step) }
-    }
-
-    fun canStep(key: String, by: Int): Boolean {
-        val shown = order.filter { listed(it) }
-        return (shown.indexOf(key) + by) in shown.indices
-    }
-
-    /** Move up or down from the menu: past the next listed row, and saved at once. */
-    fun step(key: String, by: Int): Boolean {
-        if (!canStep(key, by)) return false
-        val shown = order.filter { listed(it) }
-        val next = shown[shown.indexOf(key) + by]
-        order = Glance.moved(order, order.indexOf(key), order.indexOf(next))
-        Glance.setOrder(context, order)
-        return true
-    }
-
-    /** Move to top from the menu: above every listed row, and saved at once. */
-    fun toTop(key: String): Boolean {
-        if (!canStep(key, -1)) return false
-        val first = order.first { listed(it) }
-        order = Glance.moved(order, order.indexOf(key), order.indexOf(first))
-        Glance.setOrder(context, order)
-        return true
-    }
-
     @Composable
-    fun SourceRow(pkg: String, label: Int, actions: Modifier) {
+    fun SourceRow(pkg: String, label: Int) {
         val here = installed[pkg] == true
-        // The newer sources: not listed without their app, and off until switched on.
+        // The newer sources: not listed without their app, and off until switched on here.
         if (pkg in Glance.OPT_IN) {
             val on = pkg in switchedOn
-            SwitchRow(title = stringResource(label), note = stringResource(R.string.source_own_switch), checked = on, modifier = actions) {
+            SwitchRow(title = stringResource(label), note = null, checked = on) {
                 Glance.setSwitchedOn(context, pkg, !on)
                 switchedOn = if (on) switchedOn - pkg else switchedOn + pkg
             }
@@ -215,7 +133,6 @@ private fun MainScreen() {
                     },
                 ),
                 checked = todayOn,
-                modifier = actions,
             ) {
                 // With it on, a press on a row still missing the other calendars asks for them.
                 if (todayOn && !calendarAccess) {
@@ -228,11 +145,10 @@ private fun MainScreen() {
             }
             return
         }
-        Row(
-            title = stringResource(label),
-            value = if (here) null else stringResource(R.string.source_missing),
-            modifier = actions,
-        ) {
+        // Not installed, these are named once together, below the list.
+        if (!here) return
+        // Switched on or off in the app itself, so the row is a door to it.
+        Row(title = stringResource(label), value = null, chevron = true) {
             context.packageManager.getLaunchIntentForPackage(pkg)?.let { context.startActivity(it) }
         }
     }
@@ -246,6 +162,27 @@ private fun MainScreen() {
         PreviewScreen(serviceOn) { previewing = false }
         return
     }
+    if (ordering) {
+        BackHandler { ordering = false }
+        OrderScreen(
+            keys = order.filter { listed(it) },
+            onMove = { key, by ->
+                val shown = order.filter { listed(it) }
+                val next = shown.getOrNull(shown.indexOf(key) + by)
+                if (next != null) {
+                    order = Glance.moved(order, order.indexOf(key), order.indexOf(next))
+                    Glance.setOrder(context, order)
+                }
+            },
+            onBack = { ordering = false },
+        )
+        return
+    }
+
+    // The older sources whose app is missing: Calendar's place is taken by the Today switch.
+    val missing = (Glance.SOURCES - Glance.OPT_IN - Glance.CALENDAR)
+        .filter { installed[it] != true }
+        .mapNotNull { (SOURCES + UNREAD_SOURCES)[it] }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -256,95 +193,65 @@ private fun MainScreen() {
             )
         },
     ) { padding ->
-        LazyColumnMMD(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp).onGloballyPositioned { listAt[0] = it },
-            state = list,
-        ) {
+        LazyColumnMMD(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
             item { Spacer(Modifier.height(8.dp)) }
-            item {
-                Row(
-                    title = stringResource(if (serviceOn) R.string.service_on else R.string.service_off),
-                    value = stringResource(if (serviceOn) R.string.service_on_note else R.string.service_off_note),
-                ) {
-                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                }
-            }
-            item {
-                Row(
-                    title = stringResource(R.string.preview),
-                    value = stringResource(R.string.preview_note),
-                ) { previewing = true }
-            }
-            item {
-                TextMMD(
-                    text = stringResource(R.string.sources_heading),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 18.dp, bottom = 2.dp),
-                )
-            }
-            order.filter { listed(it) }.forEach { key ->
-                item(key = key) {
-                    val held = key == carrying
+            // Said only while there is something to do about it.
+            if (!serviceOn) {
+                item {
                     Column(
                         Modifier
                             .fillMaxWidth()
-                            .onGloballyPositioned { rows[key] = it }
-                            .holdToMove(
-                                key = key,
-                                toWindow = { rows[key]?.localToWindow(it) ?: it },
-                                onPickUp = { carrying = key },
-                                onMove = { y -> carryTo(key, y) },
-                                onDrop = {
-                                    carrying = null
-                                    Glance.setOrder(context, order)
-                                },
-                                onMenu = { menuFor = key },
-                            )
-                            // Picked up: a black rim, drawn at once, nothing that glides.
-                            .then(if (held) Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface) else Modifier)
-                            .padding(horizontal = if (held) 6.dp else 0.dp),
+                            .padding(vertical = 8.dp)
+                            .border(2.dp, MaterialTheme.colorScheme.onSurface)
+                            .clickable { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                            .padding(14.dp),
                     ) {
-                        // For a screen reader, Move up and Move down on each row it stops at.
-                        val actions = Modifier.semantics {
-                            customActions = listOfNotNull(
-                                CustomAccessibilityAction(moveTopLabel) { toTop(key) }.takeIf { canStep(key, -1) },
-                                CustomAccessibilityAction(moveUpLabel) { step(key, -1) }.takeIf { canStep(key, -1) },
-                                CustomAccessibilityAction(moveDownLabel) { step(key, 1) }.takeIf { canStep(key, 1) },
-                            )
-                        }
-                        if (key == Glance.UNREAD) {
-                            // Messaging, Email and other apps' counts share the foot of the panel,
-                            // so they move as one.
-                            UNREAD_SOURCES.forEach { (pkg, label) -> SourceRow(pkg, label, actions) }
-                            TextMMD(
-                                text = stringResource(R.string.unread_together),
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(bottom = 10.dp),
-                            )
-                        } else {
-                            SourceRow(key, SOURCES.getValue(key), actions)
-                        }
+                        TextMMD(text = stringResource(R.string.service_off), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        TextMMD(text = stringResource(R.string.service_off_note), style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
             item {
-                TextMMD(
-                    text = stringResource(R.string.sources_note),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
+                Row(title = stringResource(R.string.preview), value = stringResource(R.string.preview_note), chevron = true) { previewing = true }
+            }
+
+            item { Heading(stringResource(R.string.sources_heading)) }
+            order.filter { listed(it) }.forEach { key ->
+                item(key = key) {
+                    if (key == Glance.UNREAD) {
+                        UNREAD_SOURCES.forEach { (pkg, label) -> SourceRow(pkg, label) }
+                    } else {
+                        SourceRow(key, SOURCES.getValue(key))
+                    }
+                }
+            }
+            item {
+                Row(title = stringResource(R.string.order_title), value = stringResource(R.string.order_note), chevron = true) { ordering = true }
             }
             item {
                 TextMMD(
-                    text = stringResource(R.string.others_heading),
+                    text = stringResource(R.string.own_settings_note),
                     style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 18.dp, bottom = 2.dp),
+                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
+            if (missing.isNotEmpty()) {
+                item {
+                    val names = missing.map { stringResource(it).substringBefore(':') }
+                    TextMMD(
+                        text = stringResource(R.string.not_installed, names.joinToString(", ")),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+            }
+
+            item { Heading(stringResource(R.string.others_heading)) }
             item {
                 Row(
-                    title = stringResource(if (access) R.string.access_on else R.string.access_off),
-                    value = stringResource(if (access) R.string.access_on_note else R.string.access_off_note),
+                    title = stringResource(R.string.access_title),
+                    value = stringResource(if (access) R.string.access_on_short else R.string.access_off_note),
+                    chevron = true,
                 ) { openNotificationAccess(context) }
             }
             if (access) {
@@ -353,6 +260,7 @@ private fun MainScreen() {
                         title = stringResource(R.string.choose_apps),
                         value = if (chosenCount == 0) stringResource(R.string.chosen_none)
                             else stringResource(R.string.chosen_some).format(chosenCount),
+                        chevron = true,
                     ) { choosing = true }
                 }
                 item {
@@ -365,20 +273,14 @@ private fun MainScreen() {
                         Notices.setShowText(context, showText)
                     }
                 }
-            }
-            item {
-                TextMMD(
-                    text = stringResource(R.string.others_note),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
-            }
-            item {
-                TextMMD(
-                    text = stringResource(R.string.sound_heading),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 18.dp, bottom = 2.dp),
-                )
+                // What is shown with that switch off, said under it rather than at the foot.
+                item {
+                    TextMMD(
+                        text = stringResource(R.string.others_note),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
             }
             item {
                 SwitchRow(
@@ -397,59 +299,80 @@ private fun MainScreen() {
         }
     }
     if (aboutOpen) AboutDialog { aboutOpen = false }
-    menuFor?.let { key ->
-        MoveMenu(
-            title = stringResource(if (key == Glance.UNREAD) R.string.unread_title else SOURCES.getValue(key)),
-            canUp = canStep(key, -1),
-            canDown = canStep(key, 1),
-            onMove = { by -> step(key, by); menuFor = null },
-            onTop = { toTop(key); menuFor = null },
-            onDismiss = { menuFor = null },
-        )
+}
+
+/** A section's name, in bold capitals over a rule, so the screen reads as its parts. */
+@Composable
+private fun Heading(text: String) {
+    Column(Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 2.dp)) {
+        TextMMD(text = text.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        HorizontalDividerMMD()
     }
 }
 
-/** Held and let go: Move to top, Move up and Move down, for when dragging is fiddly. */
+/**
+ * The order of the panel, on its own page: each source with an arrow up and an arrow down.
+ * When there is not room on the lock screen for all of them, the ones at the top are shown.
+ */
 @Composable
-private fun MoveMenu(
-    title: String,
-    canUp: Boolean,
-    canDown: Boolean,
-    onMove: (Int) -> Unit,
-    onTop: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    EInkDialog(onDismiss = onDismiss) {
-        TextMMD(text = title, style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(14.dp))
-        // Like Move up, not there for the row already first.
-        if (canUp) {
-            OutlinedButtonMMD(onClick = onTop, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                TextMMD(text = stringResource(R.string.move_top), style = MaterialTheme.typography.bodySmall)
+private fun OrderScreen(keys: List<String>, onMove: (String, Int) -> Unit, onBack: () -> Unit) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
+        topBar = {
+            TopAppBarMMD(
+                title = { TextMMD(text = stringResource(R.string.order_title)) },
+                navigationIcon = { BarButton(Icons.Back, stringResource(R.string.cd_back), onBack) },
+            )
+        },
+    ) { padding ->
+        LazyColumnMMD(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
+            item {
+                TextMMD(
+                    text = stringResource(R.string.order_page_note),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                )
             }
-            Spacer(Modifier.height(10.dp))
-            OutlinedButtonMMD(onClick = { onMove(-1) }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                TextMMD(text = stringResource(R.string.move_up), style = MaterialTheme.typography.bodySmall)
+            keys.forEachIndexed { i, key ->
+                item(key = key) {
+                    androidx.compose.foundation.layout.Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextMMD(
+                            text = stringResource(if (key == Glance.UNREAD) R.string.unread_title else SOURCES.getValue(key)),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        // Not there for the first row, nor down for the last: no press that does nothing.
+                        Box(Modifier.width(48.dp)) {
+                            if (i > 0) BarButton(Icons.Up, stringResource(R.string.move_up)) { onMove(key, -1) }
+                        }
+                        Box(Modifier.width(48.dp)) {
+                            if (i < keys.size - 1) BarButton(Icons.Down, stringResource(R.string.move_down)) { onMove(key, 1) }
+                        }
+                    }
+                    HorizontalDividerMMD()
+                }
             }
-            Spacer(Modifier.height(10.dp))
-        }
-        if (canDown) {
-            OutlinedButtonMMD(onClick = { onMove(1) }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                TextMMD(text = stringResource(R.string.move_down), style = MaterialTheme.typography.bodySmall)
-            }
-            Spacer(Modifier.height(10.dp))
-        }
-        OutlinedButtonMMD(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-            TextMMD(text = stringResource(R.string.about_close), style = MaterialTheme.typography.bodySmall)
+            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
 
+/** A row that opens something: another page, another app, a setting of Android's. */
 @Composable
-private fun Row(title: String, value: String?, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).then(modifier).padding(vertical = 14.dp)) {
-        TextMMD(text = title, style = MaterialTheme.typography.bodyMedium)
-        if (value != null) TextMMD(text = value, style = MaterialTheme.typography.labelSmall)
+private fun Row(title: String, value: String?, chevron: Boolean = false, onClick: () -> Unit) {
+    androidx.compose.foundation.layout.Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            TextMMD(text = title, style = MaterialTheme.typography.bodyMedium)
+            if (value != null) TextMMD(text = value, style = MaterialTheme.typography.labelSmall)
+        }
+        if (chevron) TextMMD(text = "›", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
     }
 }
 
@@ -552,9 +475,9 @@ private fun ChooseAppsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun SwitchRow(title: String, note: String?, checked: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun SwitchRow(title: String, note: String?, checked: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).then(modifier).padding(vertical = 12.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
