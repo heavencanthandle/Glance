@@ -32,7 +32,7 @@ object Glance {
     /**
      * Stacked sections, top to bottom until the order is changed: the emergency card, today's
      * events, the next dose, the weather, pinned notes, today's tickets, then what is playing -
-     * a song, then a book.
+     * a song, then a book - and last the bitcoin price.
      */
     val STACKED = listOf(
         "com.wanderwildwood.zatsuno",
@@ -43,6 +43,7 @@ object Glance {
         "com.wanderwildwood.satsuire",
         "com.wanderwildwood.jimeikin",
         "com.wanderwildwood.mimidoku",
+        "com.wanderwildwood.zeni",
     )
 
     /** Counts that share one line at the foot: unread messages, then unread mail. */
@@ -59,13 +60,14 @@ object Glance {
 
     /**
      * Sources that stay off the panel until switched on here too, as well as in their own app:
-     * the emergency card, the next dose and today's tickets. Nothing new appears on the lock
-     * screen just because an app was installed.
+     * the emergency card, the next dose, today's tickets and the bitcoin price. Nothing new
+     * appears on the lock screen just because an app was installed.
      */
     val OPT_IN = setOf(
         "com.wanderwildwood.zatsuno",
         "com.wanderwildwood.fukuyaku",
         "com.wanderwildwood.satsuire",
+        BITCOIN,
     )
 
     private const val KEY_ON = "on"
@@ -88,8 +90,10 @@ object Glance {
 
     const val SKY = "com.wanderwildwood.soramoyo"
 
+    const val BITCOIN = "com.wanderwildwood.zeni"
+
     /** Apps that fetch their lines from elsewhere, and are asked to bring them up to date on each wake. */
-    val REFRESHED = listOf(SKY)
+    val REFRESHED = listOf(SKY, BITCOIN)
 
     /**
      * The counts as one part of the order: Messaging's and Email's unread, and other apps'

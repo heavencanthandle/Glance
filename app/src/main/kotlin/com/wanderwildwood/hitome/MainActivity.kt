@@ -513,6 +513,7 @@ private val SOURCES = mapOf(
     "com.wanderwildwood.satsuire" to R.string.source_wallet,
     "com.wanderwildwood.jimeikin" to R.string.source_music,
     "com.wanderwildwood.mimidoku" to R.string.source_audio_reading,
+    "com.wanderwildwood.zeni" to R.string.source_bitcoin,
 )
 
 /** The counts, which keep one place in the order between them. */
