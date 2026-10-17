@@ -38,11 +38,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.mudita.mmd.ThemeMMD
 import com.mudita.mmd.components.divider.HorizontalDividerMMD
-import com.mudita.mmd.components.lazy.LazyColumnMMD
 import androidx.compose.ui.text.font.FontWeight
 import com.mudita.mmd.components.switcher.SwitchMMD
 import com.mudita.mmd.components.text.TextMMD
 import com.mudita.mmd.components.top_app_bar.TopAppBarMMD
+import com.wanderwildwood.hitome.ui.PagedColumn
 import com.wanderwildwood.hitome.ui.AboutDialog
 import com.wanderwildwood.hitome.ui.BarButton
 import com.wanderwildwood.hitome.ui.GlancePanel
@@ -193,7 +193,7 @@ private fun MainScreen() {
             )
         },
     ) { padding ->
-        LazyColumnMMD(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), isScrollbarVisible = false) {
+        PagedColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
             item { Spacer(Modifier.height(8.dp)) }
             // Said only while there is something to do about it.
             if (!serviceOn) {
@@ -295,7 +295,6 @@ private fun MainScreen() {
                     if (Quiet.set(context, !quietOn)) quietOn = !quietOn
                 }
             }
-            item { Spacer(Modifier.height(24.dp)) }
         }
     }
     if (aboutOpen) AboutDialog { aboutOpen = false }
@@ -326,7 +325,7 @@ private fun OrderScreen(keys: List<String>, onMove: (String, Int) -> Unit, onBac
             )
         },
     ) { padding ->
-        LazyColumnMMD(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), isScrollbarVisible = false) {
+        PagedColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
             item {
                 TextMMD(
                     text = stringResource(R.string.order_page_note),
@@ -356,7 +355,6 @@ private fun OrderScreen(keys: List<String>, onMove: (String, Int) -> Unit, onBac
                     HorizontalDividerMMD()
                 }
             }
-            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
@@ -459,7 +457,7 @@ private fun ChooseAppsScreen(onBack: () -> Unit) {
             )
         },
     ) { padding ->
-        LazyColumnMMD(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), isScrollbarVisible = false) {
+        PagedColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
             apps.forEach { (pkg, label) ->
                 item(key = pkg) {
                     val on = pkg in chosen
@@ -469,7 +467,6 @@ private fun ChooseAppsScreen(onBack: () -> Unit) {
                     }
                 }
             }
-            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
