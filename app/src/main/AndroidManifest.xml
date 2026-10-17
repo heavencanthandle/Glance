@@ -14,15 +14,27 @@
 
       Ring for calls only sets a Do Not Disturb rule of Glance's own, which notification access
       allows; it is never set unless the owner turns it on.
+
+      The camera permission is the lamp, asked for only when Light is turned on. It is used to
+      turn the lamp on and off, and for nothing else: there is no preview and no picture.
+
+      TETHER_PRIVILEGED is the hotspot button. Android gives it only to system apps, so the
+      button may be refused. Glance still does not use the network itself.
     -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.TETHER_PRIVILEGED" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
 
     <queries>
         <package android:name="com.wanderwildwood.zatsuno" />
         <package android:name="com.wanderwildwood.koyomi" />
         <package android:name="com.wanderwildwood.fukuyaku" />
         <package android:name="com.wanderwildwood.soramoyo" />
+        <package android:name="com.heavencanthandle.almanac" />
+        <provider android:authorities="com.heavencanthandle.almanac.glance" />
         <package android:name="com.wanderwildwood.oboegaki" />
         <package android:name="com.wanderwildwood.satsuire" />
         <package android:name="com.wanderwildwood.jimeikin" />

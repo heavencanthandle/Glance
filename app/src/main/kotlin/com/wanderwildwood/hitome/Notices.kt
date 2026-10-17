@@ -107,6 +107,7 @@ class NoticeListener : NotificationListenerService() {
             Notices.publish(emptyList())
             return
         }
+        val handed = Glance.SOURCES.toSet() + Glance.discovered(this)
         val active = try { activeNotifications?.toList() } catch (_: Exception) { null } ?: emptyList()
         val ranking = try { currentRanking } catch (_: Exception) { null }
         val rank = Ranking()
@@ -119,7 +120,7 @@ class NoticeListener : NotificationListenerService() {
         active.forEach { sbn ->
             val pkg = sbn.packageName
             val isOwn = showText && pkg in Glance.COUNTS
-            if (!isOwn && (pkg !in chosen || pkg in Glance.SOURCES)) return@forEach
+            if (!isOwn && (pkg !in chosen || pkg in handed)) return@forEach
             val n = sbn.notification
             if (sbn.isOngoing) return@forEach
             if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return@forEach

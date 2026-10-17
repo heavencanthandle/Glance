@@ -3,6 +3,12 @@
 Today's events, the weather and what is unread, on the lock screen of a Mudita Kompakt, so the
 day can be seen without unlocking the phone.
 
+This is a fork of [wander wildwood's Glance](https://github.com/wanderwildwood/hitome). It keeps
+that app's package name, so Calendar, Sky and the others still hand it their lines. Added here:
+a utilities row (lamp, moon, hotspot), and a place for any other app that hands over lines.
+Choosing a size for the time and date is in the code and not offered yet: look at that again
+before a release, because the cover sat on the music controls.
+
 *Hitome* is 一目 — one look, a glance.
 
 | | |
@@ -27,6 +33,9 @@ change it:
   in bold, then the next one due.
 - **The weather**, from [Sky](https://github.com/wanderwildwood/soramoyo): the temperature
   now, the day's high and low, and a line when rain or snow is likely soon.
+- **Almanac** (`com.heavencanthandle.almanac`): the lines that app hands over, once it is
+  installed and its own lock-screen switch is on. The same switch is what lets the moon
+  icon draw; those lines stay in the panel.
 - **Pinned notes**, from [Notes](https://github.com/wanderwildwood/oboegaki): each by its title,
   and a list with how much of it is left, "Groceries · 3 to do".
 - **Today's tickets**, from [Wallet](https://github.com/wanderwildwood/satsuire): the names of
@@ -44,20 +53,33 @@ change it:
   notification, "Signal 2  Mom: see you at five", except where Android itself would hide it.
   Messaging and Email then get a line of their words too, under their counts.
 
-Pressing a section, or an app's name, unlocks the phone and opens that app.
+Pressing a section, or an app's name, unlocks the phone and opens that app. Pressing a utility
+icon does not: the lamp and the hotspot turn over and the phone stays locked.
+
+**Utilities.** One row of icons under the clock, or under the music controls when they are
+showing. The row has a switch, and so does each icon. **Light** uses the camera's lamp and
+takes no pictures. **Moon** is Almanac's phase, ink on the sunlit side. **Hotspot** asks the
+phone to start or stop the internet hotspot; Android may refuse that. A phone with no lamp
+does not show the lamp.
+
+**Time and date.** The phone's own clock stays. A chooser for the size is written and not
+shown: look at it again before a release.
 
 Glance knows nothing on its own. Each app hands it its own lines and has its own switch, in its
 own settings, to stop. An app that is not installed, has nothing to say, or has its switch off
 simply leaves no line. Field Kit, Medicine and Wallet also wait for a switch in Glance, under
-**What it shows**, which is there once the app is installed and off until you turn it on. Other
-apps are the exception: Glance counts their notifications itself, and only for the apps you
-choose.
+**What it shows**, which is there once the app is installed and off until you turn it on. Any
+other installed app with a `.glance` provider is listed there the same way, off until it is
+switched on. Other apps' notifications are the exception: Glance counts them itself, and only
+for the apps you choose.
 
 ## Where it sits
 
-It measures where the lock screen's own items end - the date, the charging line, Mudita's music
-player - and starts below the lowest, each time the screen wakes. It stops above the strip Music
-Box and Audio Reading draw near the foot of the screen, and above the padlock.
+It measures where the lock screen's own items end - the date, the charging line, the music
+controls - and starts below the lowest, each time the screen wakes. An overlay under the clock,
+such as Music Box's controls, is part of that header, so the controls stay whole and the panel
+sits under them. A strip drawn at the foot of the screen stays below the panel. The panel also
+stops above the padlock.
 
 The parts are drawn in the order they are listed under **What it shows** in Glance, which is
 the order above until you change it: hold a row and drag it, or hold and let go for **Move to
@@ -112,12 +134,12 @@ Then, on the phone:
 
 ## Getting it, and keeping it
 
-Download <https://github.com/wanderwildwood/hitome/releases/latest/download/hitome.apk> and
-sideload it. That address always points at the newest release, with a `.sha256` beside it.
+Build it from this tree and sideload that APK. It installs as `com.wanderwildwood.hitome`, the
+same id as upstream, so the other apps keep answering it. The signature is yours, not
+upstream's: if upstream's Glance is already installed, uninstall that once before this one.
+Point Obtainium at this repository, not at `wanderwildwood/hitome`.
 
-For updates, add this repository to [Obtainium](https://github.com/ImranR98/Obtainium):
-
-    https://github.com/wanderwildwood/hitome
+Upstream is the git remote `upstream`. Its history is kept, so a later Glance can be merged.
 
 ## Building
 
@@ -132,8 +154,9 @@ release APK builds **unsigned** and will not install anywhere; there is no fallb
 
 Any app can take part: a read-only provider at `<package>.glance/lines` with the columns
 `heading`, `lead`, `text` and `bold`, answering only `com.wanderwildwood.hitome`. The file the
-apps share is `glance/GlanceProvider.kt` in any of them. Glance reads a fixed list of apps
-today; ask, and another can be added.
+apps share is `glance/GlanceProvider.kt` in any of them. Glance lists every installed app that
+has one, under **On the lock screen**, off until it is switched on here. The app's own switch
+still decides whether the lines exist.
 
 ## Credit
 

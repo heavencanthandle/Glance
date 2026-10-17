@@ -6,7 +6,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.database.ContentObserver
+import android.net.Uri
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.media.AudioManager
@@ -21,8 +23,19 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import androidx.compose.runtime.Composable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -34,7 +47,10 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.wanderwildwood.hitome.ui.ClockCover
 import com.wanderwildwood.hitome.ui.GlancePanel
+import com.wanderwildwood.hitome.ui.PANEL_WIDTH_DP
+import com.wanderwildwood.hitome.ui.UtilityIcons
 import com.wanderwildwood.hitome.ui.firstDp
 import com.wanderwildwood.hitome.ui.leastDp
 import kotlinx.coroutines.CoroutineScope
@@ -56,8 +72,10 @@ import kotlinx.coroutines.withContext
  *
  * It shows only while the phone is locked with the screen on, the PIN pad is not up, and no call
  * is ringing or live. It sits under the lowest thing the lock screen itself shows in its upper
- * half - the date, or the charging line, or Mudita's own music player - measured each time
- * rather than assumed, and above the strip a music app may draw near the foot of the screen.
+ * half - the date, or the charging line, or the music controls - measured each time rather
+ * than assumed. Music Box's controls, and any other overlay under the clock, stay above the
+ * panel so they can be pressed. A strip drawn at the foot of the screen stays below it.
+ * The utilities row, when it is on, is the first thing in the panel: the lamp, the moon, the hotspot.
  * Katapult's own lock-screen widgets, when they are drawn, are made room for in the same way.
  */
 class LockscreenPanel(private val service: AccessibilityService) :
@@ -73,12 +91,16 @@ class LockscreenPanel(private val service: AccessibilityService) :
     private val handler = Handler(Looper.getMainLooper())
     private val sections = mutableStateOf<List<Glance.Section>>(emptyList())
     private val notices = mutableStateOf<List<Notices.Notice>>(emptyList())
+    private val lamp = mutableStateOf(false)
+    private val hotspot = mutableStateOf(false)
+    private val watched = mutableSetOf<Uri>()
     private var scope: CoroutineScope? = null
     private var reading: Job? = null
     private var overlay: ComposeView? = null
     private var overlayTop = -1
     private var overlayRoom = -1
     private var overlayTrimmed = false
+    private var overlayCover = 0
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -88,7 +110,9 @@ class LockscreenPanel(private val service: AccessibilityService) :
                 bringUpToDate()
             }
             // A new look at the lock screen: whether its items can be read is learned afresh.
-            if (intent.action == Intent.ACTION_SCREEN_OFF) sawLockScreen = false
+            if (intent.action == Intent.ACTION_SCREEN_OFF) {
+                sawLockScreen = false
+            }
             evaluate()
         }
     }
@@ -116,38 +140,83 @@ class LockscreenPanel(private val service: AccessibilityService) :
             addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
         })
-        ((Glance.STACKED + Glance.COUNTS).map { Glance.uri(it) } + Today.watched(service)).forEach { uri ->
-            try {
-                service.contentResolver.registerContentObserver(uri, true, changes)
-            } catch (_: Exception) {}
-        }
+        Torch.attach(service)
+        Hotspot.attach(service)
+        scheduleMinute()
         scope?.launch {
             Notices.now.collect {
                 notices.value = it
                 evaluate()
             }
         }
+        scope?.launch {
+            Torch.lamp.collect { lamp.value = it }
+        }
+        scope?.launch {
+            Hotspot.on.collect { hotspot.value = it }
+        }
         readAll()
     }
 
     fun stop() {
         handler.removeCallbacks(recheck)
+        handler.removeCallbacks(minute)
         scope?.cancel()
         scope = null
         remove()
+        Hotspot.detach(service)
         try { service.unregisterReceiver(screenReceiver) } catch (_: Exception) {}
         try { service.contentResolver.unregisterContentObserver(changes) } catch (_: Exception) {}
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         store.clear()
     }
 
+    /** Lines from the named apps, and from any other app that has a `.glance` provider. */
+    private fun watchAll() {
+        val uris = (Glance.STACKED + Glance.COUNTS + Glance.discovered(service)).map { Glance.uri(it) } +
+            Today.watched(service) + Moon.URI
+        uris.forEach { uri ->
+            if (!watched.add(uri)) return@forEach
+            try {
+                service.contentResolver.registerContentObserver(uri, true, changes)
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun readAll() {
+        watchAll()
         val s = scope ?: return
         reading?.cancel()
         reading = s.launch {
-            sections.value = withContext(Dispatchers.IO) {
-                Glance.readAll(service)
+            val (lines, phase) = withContext(Dispatchers.IO) {
+                Glance.readAll(service) to Moon.read(service)
             }
+            sections.value = lines
+            moonPhase.value = phase
+            evaluate()
+        }
+    }
+
+    /** Almanac's phase, read with the lines and again as each minute begins. */
+    private val moonPhase = mutableStateOf<Moon.Phase?>(null)
+
+    private val minute = Runnable {
+        readMoon()
+        scheduleMinute()
+    }
+
+    private fun scheduleMinute() {
+        handler.removeCallbacks(minute)
+        val wait = 60_000L - (System.currentTimeMillis() % 60_000L)
+        handler.postDelayed(minute, wait.coerceAtLeast(1_000L))
+    }
+
+    private fun readMoon() {
+        val s = scope ?: return
+        s.launch {
+            val phase = withContext(Dispatchers.IO) { Moon.read(service) }
+            if (phase == moonPhase.value) return@launch
+            moonPhase.value = phase
             evaluate()
         }
     }
@@ -198,12 +267,9 @@ class LockscreenPanel(private val service: AccessibilityService) :
         val locked = keyguard.isKeyguardLocked
         val interactive = power.isInteractive
         val covered = appOverLockScreen()
-        val show = locked &&
-            interactive &&
-            (sections.value.isNotEmpty() || notices.value.isNotEmpty()) &&
-            !inCall() &&
-            !covered &&
-            !pinShowing()
+        val host = locked && interactive && !inCall() && !covered && !pinShowing()
+        val show = host &&
+            (sections.value.isNotEmpty() || notices.value.isNotEmpty() || wantsUtilities())
         if (show) {
             place()
         } else {
@@ -213,17 +279,45 @@ class LockscreenPanel(private val service: AccessibilityService) :
             remove()
         }
         handler.removeCallbacks(recheck)
+        val now = SystemClock.uptimeMillis()
         // Looked at again while it is up, and while it waits to settle, so that it comes back.
-        if (overlay != null || SystemClock.uptimeMillis() < settleUntil + SETTLE_MS) {
-            val quick = SystemClock.uptimeMillis() < quickUntil
+        if (overlay != null || now < settleUntil + SETTLE_MS) {
+            val quick = now < quickUntil
             handler.postDelayed(recheck, if (quick) QUICK_RECHECK_MS else RECHECK_MS)
         }
     }
 
+    private fun wantsClock(): Boolean = Clock.size(service) != Clock.Size.SYSTEM
+
+    /** The lamp, only once the camera permission has been given and the phone has a lamp. */
+    private fun wantsLight(): Boolean =
+        Utilities.master(service) &&
+            Torch.enabled(service) &&
+            Torch.hasFlash(service) &&
+            ContextCompat.checkSelfPermission(service, android.Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+
+    /** The icon row: lamp, moon, hotspot. Each one can be off on its own. */
+    private fun wantsUtilities(): Boolean {
+        if (!Utilities.master(service)) return false
+        if (wantsLight()) return true
+        if (Hotspot.enabled(service)) return true
+        return Utilities.moon(service) && moonPhase.value != null
+    }
+
+    private fun utilityIcons(): UtilityIcons = UtilityIcons(
+        lightOn = if (wantsLight()) lamp.value else null,
+        onLight = { Torch.toggle(service) },
+        phase = if (Utilities.master(service) && Utilities.moon(service)) moonPhase.value else null,
+        hotspotOn = if (Utilities.master(service) && Hotspot.enabled(service)) hotspot.value else null,
+        onHotspot = { Hotspot.toggle(service) },
+    )
+
     /** Adds the panel, or moves it when what the lock screen shows above it has changed. */
     private fun place() {
         val density = service.resources.displayMetrics.density
-        val bottom = lockScreenBottom()
+        val band = lockScreenBand()
+        val bottom = band?.bottom
         // ⚠ The lock screen's own items gone, on a lock screen that had them, is the lock screen
         // going: Android still says "locked" for up to 0.6 s after it has visibly gone, and a
         // panel put back then was drawn over the home screen. The fallback place is only for
@@ -233,47 +327,55 @@ class LockscreenPanel(private val service: AccessibilityService) :
             remove()
             return
         }
-        if (bottom != null) sawLockScreen = true
+        if (band != null) sawLockScreen = true
         val gap = (GAP_DP * density).toInt()
         val screen = service.resources.displayMetrics.heightPixels
-        var top = bottom?.let { it + gap } ?: (FALLBACK_TOP_DP * density).toInt()
-        val floor = screen - ((MUSIC_STRIP_TOP_FROM_BOTTOM_DP + GAP_DP) * density).toInt()
-        // Katapult's widgets are made room for: its music player and its notifications, which
-        // can be dragged anywhere. They split the room between the lock screen's items and the
-        // music strip into parts, and the panel takes the first part it fits in whole: all of
-        // it if it can, or else as much as fits, the person's first part first ([Glance.order]).
-        // Where even the first part fits nowhere, it
-        // does not show: a panel over Katapult's is worse than none, and moving Katapult's
-        // widget makes room.
-        val katapult = katapultBounds().sortedBy { it.top }
-        val gaps = mutableListOf<Pair<Int, Int>>()
-        var from = top
-        katapult.forEach {
-            val to = minOf(it.top - gap, floor)
-            if (to > from) gaps += from to to
-            from = maxOf(from, it.bottom + gap)
+        val overlays = otherOverlays()
+        // A player under the clock is part of the header: the panel starts below it, so the
+        // controls stay whole and keep their presses. A strip at the foot stays below the panel.
+        val split = (screen * PLAYER_SPLIT).toInt()
+        val headerBottom = overlays
+            .filter { (it.top + it.bottom) / 2 < split }
+            .maxOfOrNull { it.bottom }
+        val bandTop = bottom?.let { it + gap } ?: (FALLBACK_TOP_DP * density).toInt()
+        val classicTop = maxOf(bandTop, headerBottom?.let { it + gap } ?: bandTop)
+        val floor = screen - (PADLOCK_DP * density).toInt()
+        if (classicTop >= floor) {
+            if (overlay != null) Log.i(TAG, "no room under the music controls: down")
+            remove()
+            return
         }
-        if (floor > from || katapult.isEmpty()) gaps += from to floor
+        // Other overlays (Katapult's widgets, a player at the foot) split what is left. The
+        // panel takes the first gap it fits in. Where even the first part fits nowhere, it
+        // does not show: covering those controls is worse than leaving the lines off.
+        val obstacles = overlays.sortedBy { it.top }
         val order = Glance.order(service)
-        val whole = leastDp(sections.value, notices.value, order)
-        val part = firstDp(sections.value, notices.value, order)
-        fun fitting(least: Int) = gaps.firstOrNull { (a, b) -> (b - a) / density >= least }
-        // Without Katapult's widgets the panel takes what room there is and never hides: on a
-        // tight lock screen (Mudita's music player, a charging line) it keeps what fits, in order.
-        val (fits, trim) = when {
-            fitting(whole) != null -> fitting(whole) to false
-            fitting(part) != null -> fitting(part) to true
-            katapult.isEmpty() -> gaps.single() to true
-            else -> null to true
-        }
-        if (fits == null) {
+        val utilities = wantsUtilities()
+        val whole = leastDp(sections.value, notices.value, order, utilities)
+        val part = firstDp(sections.value, notices.value, order, utilities)
+        val size = Clock.size(service)
+        val clockPx = (Clock.heightDp(size) * density).toInt()
+        val coverPx = if (band != null) maxOf(clockPx, band.bottom - band.top) else clockPx
+        val clockTop = band?.top ?: STATUS_BAR_PX
+        val panelStart = clockTop + coverPx
+        // A widget already over the clock is left alone: covering it would hide it. With no
+        // band, the phone's clock stays and the panel takes its fallback place.
+        val clockClear = wantsClock() && band != null &&
+            obstacles.none { it.bottom > clockTop && it.top < panelStart }
+        val underClock = if (clockClear) fitGap(panelStart, floor, gap, obstacles, density, whole, part) else null
+        // The clock and the lines are one window, so the lines start where the clock ends.
+        val drawClock = underClock != null && underClock.top == panelStart
+        val placed = if (drawClock) underClock else fitGap(classicTop, floor, gap, obstacles, density, whole, part)
+        if (placed == null) {
             if (overlay != null) Log.i(TAG, "no room beside Katapult's widgets: down")
             remove()
             return
         }
-        top = fits.first
-        val room = ((fits.second - top) / density).toInt().coerceAtLeast(0)
-        if (overlay != null && top == overlayTop && room == overlayRoom && trim == overlayTrimmed) return
+        val top = if (drawClock) clockTop else placed.top
+        val room = placed.room
+        val trim = placed.trim
+        val cover = if (drawClock) coverPx else 0
+        if (overlay != null && top == overlayTop && room == overlayRoom && trim == overlayTrimmed && cover == overlayCover) return
         val now = SystemClock.uptimeMillis()
         // ⚠ Never moved while it is up. The lock screen rearranges itself as it goes away, and
         // a panel that followed it was taken down and put up again as a new window at the
@@ -301,13 +403,26 @@ class LockscreenPanel(private val service: AccessibilityService) :
             setViewTreeViewModelStoreOwner(this@LockscreenPanel)
             setViewTreeSavedStateRegistryOwner(this@LockscreenPanel)
             setContent {
-                GlancePanel(
-                    sections = sections.value,
-                    notices = notices.value,
-                    order = Glance.order(service),
-                    roomDp = room,
-                    onOpen = { pkg -> open(pkg) },
-                )
+                val panel: @Composable () -> Unit = {
+                    GlancePanel(
+                        sections = sections.value,
+                        notices = notices.value,
+                        order = Glance.order(service),
+                        roomDp = room,
+                        onOpen = { pkg -> open(pkg) },
+                        utilities = utilityIcons(),
+                    )
+                }
+                if (cover > 0) {
+                    Column(Modifier.fillMaxWidth().background(Color.White)) {
+                        ClockCover(size, (cover / density).toInt(), moonPhase.value)
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                            Box(Modifier.width(PANEL_WIDTH_DP.dp)) { panel() }
+                        }
+                    }
+                } else {
+                    panel()
+                }
             }
         }
         val params = WindowManager.LayoutParams().apply {
@@ -317,14 +432,28 @@ class LockscreenPanel(private val service: AccessibilityService) :
             // unlock begins. See [touchedAway].
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-            width = (WIDTH_DP * density).toInt()
+            width = if (cover > 0) WindowManager.LayoutParams.MATCH_PARENT else (WIDTH_DP * density).toInt()
             height = WindowManager.LayoutParams.WRAP_CONTENT
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             windowAnimations = R.style.PanelWindow
             y = top
         }
-        view.setOnTouchListener { _, event ->
-            if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) touchedAway()
+        view.setOnTouchListener { v, event ->
+            if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) {
+                touchedAway()
+                return@setOnTouchListener false
+            }
+            // The clock's window is as wide as the screen so it covers the phone's clock.
+            // A touch on the clock, or in the margin beside the lines, is the swipe starting.
+            if (cover > 0 && event.actionMasked == MotionEvent.ACTION_DOWN) {
+                val panelWidth = (WIDTH_DP * density).toInt()
+                val left = (v.width - panelWidth) / 2f
+                val inColumn = event.x >= left && event.x < left + panelWidth
+                if (!inColumn || event.y < cover) {
+                    touchedAway()
+                    return@setOnTouchListener true
+                }
+            }
             false
         }
         try {
@@ -333,10 +462,45 @@ class LockscreenPanel(private val service: AccessibilityService) :
             overlayTop = top
             overlayRoom = room
             overlayTrimmed = trim
+            overlayCover = cover
         } catch (_: Exception) {
             overlay = null
         }
     }
+
+    /**
+     * The first gap at or below [start] that can hold the panel. Null when Katapult's widgets
+     * leave none. Without them there is always the one gap, however short.
+     */
+    private fun fitGap(
+        start: Int,
+        floor: Int,
+        gap: Int,
+        katapult: List<Rect>,
+        density: Float,
+        whole: Int,
+        part: Int,
+    ): Gap? {
+        val gaps = mutableListOf<Pair<Int, Int>>()
+        var from = start
+        katapult.forEach {
+            val to = minOf(it.top - gap, floor)
+            if (to > from) gaps += from to to
+            from = maxOf(from, it.bottom + gap)
+        }
+        if (floor > from || katapult.isEmpty()) gaps += from to floor
+        fun fitting(least: Int) = gaps.firstOrNull { (a, b) -> (b - a) / density >= least }
+        val (fits, trim) = when {
+            fitting(whole) != null -> fitting(whole) to false
+            fitting(part) != null -> fitting(part) to true
+            katapult.isEmpty() -> gaps.singleOrNull() to true
+            else -> null to true
+        }
+        val slot = fits ?: return null
+        return Gap(slot.first, ((slot.second - slot.first) / density).toInt().coerceAtLeast(0), trim)
+    }
+
+    private data class Gap(val top: Int, val room: Int, val trim: Boolean)
 
     /**
      * A finger went down somewhere else on the lock screen: most likely the start of the swipe
@@ -375,6 +539,7 @@ class LockscreenPanel(private val service: AccessibilityService) :
         overlay = null
         overlayTop = -1
         overlayRoom = -1
+        overlayCover = 0
     }
 
     /** Unlock, then open the app whose lines were pressed. */
@@ -386,14 +551,19 @@ class LockscreenPanel(private val service: AccessibilityService) :
     }
 
     /**
-     * The bottom edge, in pixels, of the lowest thing the lock screen draws in the upper part
-     * of the screen: the date, the charging line, or Mudita's music widget. Null when the lock
-     * screen cannot be read, and the panel then takes a fixed place.
+     * Where the lock screen's own upper items are: the clock, the date, the charging line,
+     * Mudita's music widget. Null when the lock screen cannot be read, and the panel then
+     * takes a fixed place. [Band.top] is where a chosen clock size starts, so it covers them.
      */
-    private fun lockScreenBottom(): Int? = try {
+    private fun lockScreenBand(): Band? = try {
         val screen = service.resources.displayMetrics.heightPixels
+        val density = service.resources.displayMetrics.density
         val limit = (screen * UPPER_PART).toInt()
+        // Play and pause sit under the clock and can fall below that line. They are part of
+        // the header too, so the panel starts under the controls. The padlock is not.
+        val abovePadlock = screen - (PADLOCK_DP * density).toInt()
         var lowest = -1
+        var highest = Int.MAX_VALUE
         val bounds = Rect()
         service.windows.forEach { window ->
             val root = window.root ?: return@forEach
@@ -401,29 +571,36 @@ class LockscreenPanel(private val service: AccessibilityService) :
             fun walk(node: AccessibilityNodeInfo) {
                 if (node.isVisibleToUser && node.childCount == 0) {
                     node.getBoundsInScreen(bounds)
+                    val text = node.text?.toString() ?: node.contentDescription?.toString()
+                    val media = text != null && MEDIA.containsMatchIn(text) && bounds.bottom < abovePadlock
                     // Leaves only, in the upper part, and not the status bar along the top.
-                    if (bounds.top > STATUS_BAR_PX && bounds.bottom < limit && bounds.height() > 0) {
+                    if (bounds.top > STATUS_BAR_PX && bounds.height() > 0 &&
+                        (bounds.bottom < limit || media)
+                    ) {
                         lowest = maxOf(lowest, bounds.bottom)
+                        highest = minOf(highest, bounds.top)
                     }
                 }
                 for (i in 0 until node.childCount) node.getChild(i)?.let { walk(it) }
             }
             walk(root)
         }
-        lowest.takeIf { it > 0 }
+        if (lowest > 0 && highest != Int.MAX_VALUE) Band(highest, lowest) else null
     } catch (_: Exception) {
         null
     }
 
+    private data class Band(val top: Int, val bottom: Int)
+
     /**
-     * Where Katapult's lock-screen widgets are, while it is drawing them. Looked at rather than
-     * inferred from its service being on: that one service also locks the phone on a double tap,
-     * covers the status-bar clock and runs the screensaver, and its widgets are off by default.
+     * Other accessibility overlays on the lock screen: Katapult's widgets, Music Box's controls,
+     * Audio Reading's. Glance's own window is not one of them. Looked at rather than inferred
+     * from a service being on, because the widgets are off until they are drawn.
      */
-    private fun katapultBounds(): List<Rect> = try {
+    private fun otherOverlays(): List<Rect> = try {
         service.windows
             .filter { it.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY }
-            .filter { it.root?.packageName == KATAPULT }
+            .filter { it.root?.packageName?.let { name -> name != service.packageName } == true }
             .map { w -> Rect().also { w.getBoundsInScreen(it) } }
             .filter { it.height() > 0 && it.top > STATUS_BAR_PX }
     } catch (_: Exception) {
@@ -468,15 +645,17 @@ class LockscreenPanel(private val service: AccessibilityService) :
 
     private companion object {
         const val SYSTEM_UI = "com.android.systemui"
-        const val KATAPULT = "com.gezimos.katapult"
         // The width of the lock screen's own dotted rules, so the panel lines up under them.
         const val WIDTH_DP = com.wanderwildwood.hitome.ui.PANEL_WIDTH_DP.toFloat()
         const val GAP_DP = 8f
         // Where the panel goes if the lock screen cannot be read: under the date and a
         // charging line, which is where Mudita's own widget ends.
         const val FALLBACK_TOP_DP = 292f
-        // A music app's lock-screen strip: 96dp up from the foot and about 52dp tall.
-        const val MUSIC_STRIP_TOP_FROM_BOTTOM_DP = 148f
+        // The padlock and "Swipe up". The panel stops above them. A player drawn at the foot
+        // is an overlay and is kept clear of on its own; this is only the system controls.
+        const val PADLOCK_DP = 96f
+        // Overlays whose middle is above this are under the clock: the panel starts below them.
+        const val PLAYER_SPLIT = 0.62f
         // The lock screen's own items are measured only in the top 60% of the screen; below
         // that are the padlock and "Swipe Up".
         const val UPPER_PART = 0.6f
@@ -495,5 +674,6 @@ class LockscreenPanel(private val service: AccessibilityService) :
         // measured to run out mid-swipe on a Kompakt, bringing the panel back just as the lock
         // screen went.
         const val TOUCH_HOLD_MS = 3_000L
+        val MEDIA: Regex = Regex("""(?i)\b(play|pause|next|previous|skip)\b""")
     }
 }
