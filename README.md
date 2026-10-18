@@ -90,6 +90,14 @@ Disturb rule of Glance's own, listed with the phone's other Do Not Disturb rules
 the phone's own Do Not Disturb settings alone. It needs notification access. Turning on the
 phone's own Do Not Disturb and off again also turns this off; press it again to bring it back.
 
+**Power pressed twice**, under **Torch**, turns the torch on or off with two quick presses of the
+power key, locked or not. The Kompakt has Android's own double press switched off, and no app can
+hear the power key, so Glance watches the screen go on and off instead: two changes within about
+half a second are two presses. It is the white light, the camera's torch: Mudita's warm light
+answers only Mudita's own apps, and Mudita's control panel does not show this one as on. So while
+it is on, the panel says **Torch on** at the top; press it to turn the torch off. It is off until
+you turn it on, and works while Glance is on in Accessibility.
+
 An overlay above the lock screen is a window only an accessibility service is allowed to add,
 which is why it needs that switch. Counting notifications needs notification access, which
 Android grants to all of them; Glance counts only the ones you chose. See [PRIVACY.md](PRIVACY.md) for what it reads.

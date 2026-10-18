@@ -84,6 +84,8 @@ private fun MainScreen() {
     val chosenCount = remember(checks, choosing) { Notices.chosen(context).size }
     var showText by remember { mutableStateOf(Notices.showText(context)) }
     var quietOn by remember(checks) { mutableStateOf(Quiet.on(context)) }
+    var torchOn by remember { mutableStateOf(Torch.enabled(context)) }
+    val hasTorch = remember { Torch.available(context) }
 
     var todayOn by remember { mutableStateOf(Today.enabled(context)) }
     var switchedOn by remember { mutableStateOf(Glance.OPT_IN.filter { Glance.switchedOn(context, it) }.toSet()) }
@@ -215,9 +217,11 @@ private fun MainScreen() {
                 Row(title = stringResource(R.string.preview), value = stringResource(R.string.preview_note), chevron = true) { previewing = true }
             }
 
-            item { Heading(stringResource(R.string.sources_heading)) }
-            order.filter { listed(it) }.forEach { key ->
+            // Each heading is drawn in the item of the row under it, so a page never ends on a
+            // heading alone.
+            order.filter { listed(it) }.forEachIndexed { i, key ->
                 item(key = key) {
+                    if (i == 0) Heading(stringResource(R.string.sources_heading))
                     if (key == Glance.UNREAD) {
                         UNREAD_SOURCES.forEach { (pkg, label) -> SourceRow(pkg, label) }
                     } else {
@@ -246,8 +250,8 @@ private fun MainScreen() {
                 }
             }
 
-            item { Heading(stringResource(R.string.others_heading)) }
             item {
+                Heading(stringResource(R.string.others_heading))
                 Row(
                     title = stringResource(R.string.access_title),
                     value = stringResource(if (access) R.string.access_on_short else R.string.access_off_note),
@@ -293,6 +297,16 @@ private fun MainScreen() {
                         return@SwitchRow
                     }
                     if (Quiet.set(context, !quietOn)) quietOn = !quietOn
+                }
+            }
+            // Only on a phone with a torch to switch.
+            if (hasTorch) {
+                item {
+                    Heading(stringResource(R.string.torch_heading))
+                    SwitchRow(title = stringResource(R.string.torch), note = stringResource(R.string.torch_note), checked = torchOn) {
+                        torchOn = !torchOn
+                        Torch.setEnabled(context, torchOn)
+                    }
                 }
             }
         }

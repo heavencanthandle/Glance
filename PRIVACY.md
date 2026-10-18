@@ -41,6 +41,9 @@ today's events itself, if you turn that on. It has no network access and sends n
   Disturb rule of its own (calls from anyone and alarms ring, nothing is hidden) and removes it
   when you turn it off. It reads nothing through it. The code is
   `app/src/main/kotlin/com/wanderwildwood/hitome/Quiet.kt`.
+- **The torch, only if you turn on Power pressed twice.** Glance notes when the screen goes on
+  and off, keeps nothing of it, and switches the torch. It does not open the camera. The code is
+  `app/src/main/kotlin/com/wanderwildwood/hitome/Torch.kt`.
 
 ## What anyone can see
 

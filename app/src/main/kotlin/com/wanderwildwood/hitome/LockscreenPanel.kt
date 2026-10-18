@@ -73,6 +73,7 @@ class LockscreenPanel(private val service: AccessibilityService) :
     private val handler = Handler(Looper.getMainLooper())
     private val sections = mutableStateOf<List<Glance.Section>>(emptyList())
     private val notices = mutableStateOf<List<Notices.Notice>>(emptyList())
+    private val torchLit = mutableStateOf(false)
     private var scope: CoroutineScope? = null
     private var reading: Job? = null
     private var overlay: ComposeView? = null
@@ -124,6 +125,12 @@ class LockscreenPanel(private val service: AccessibilityService) :
         scope?.launch {
             Notices.now.collect {
                 notices.value = it
+                evaluate()
+            }
+        }
+        scope?.launch {
+            Torch.lit.collect {
+                torchLit.value = it
                 evaluate()
             }
         }
@@ -200,7 +207,7 @@ class LockscreenPanel(private val service: AccessibilityService) :
         val covered = appOverLockScreen()
         val show = locked &&
             interactive &&
-            (sections.value.isNotEmpty() || notices.value.isNotEmpty()) &&
+            (shownSections().isNotEmpty() || notices.value.isNotEmpty()) &&
             !inCall() &&
             !covered &&
             !pinShowing()
@@ -254,9 +261,9 @@ class LockscreenPanel(private val service: AccessibilityService) :
             from = maxOf(from, it.bottom + gap)
         }
         if (floor > from || katapult.isEmpty()) gaps += from to floor
-        val order = Glance.order(service)
-        val whole = leastDp(sections.value, notices.value, order)
-        val part = firstDp(sections.value, notices.value, order)
+        val order = shownOrder()
+        val whole = leastDp(shownSections(), notices.value, order)
+        val part = firstDp(shownSections(), notices.value, order)
         fun fitting(least: Int) = gaps.firstOrNull { (a, b) -> (b - a) / density >= least }
         // Without Katapult's widgets the panel takes what room there is and never hides: on a
         // tight lock screen (Mudita's music player, a charging line) it keeps what fits, in order.
@@ -302,9 +309,9 @@ class LockscreenPanel(private val service: AccessibilityService) :
             setViewTreeSavedStateRegistryOwner(this@LockscreenPanel)
             setContent {
                 GlancePanel(
-                    sections = sections.value,
+                    sections = shownSections(),
                     notices = notices.value,
-                    order = Glance.order(service),
+                    order = shownOrder(),
                     roomDp = room,
                     onOpen = { pkg -> open(pkg) },
                 )
@@ -377,8 +384,32 @@ class LockscreenPanel(private val service: AccessibilityService) :
         overlayRoom = -1
     }
 
-    /** Unlock, then open the app whose lines were pressed. */
+    /**
+     * The sections, with the torch's line over them all while it is on: it is the one thing on
+     * the panel that is pressed to be put right rather than looked at.
+     */
+    private fun shownSections(): List<Glance.Section> =
+        if (torchShown()) listOf(torchSection()) + sections.value else sections.value
+
+    private fun shownOrder(): List<String> =
+        if (torchShown()) listOf(Torch.PANEL_KEY) + Glance.order(service) else Glance.order(service)
+
+    /** Only for whoever turned on Power pressed twice: nothing new appears unasked. */
+    private fun torchShown() = torchLit.value && Torch.enabled(service)
+
+    private fun torchSection() = Glance.Section(
+        packageName = Torch.PANEL_KEY,
+        heading = null,
+        lines = listOf(Glance.Line(null, service.getString(R.string.torch_on_line), bold = true)),
+        key = Torch.PANEL_KEY,
+    )
+
+    /** Unlock, then open the app whose lines were pressed; the torch's line turns it off. */
     private fun open(pkg: String) {
+        if (pkg == Torch.PANEL_KEY) {
+            Torch.off(service)
+            return
+        }
         val intent = Intent(service, UnlockActivity::class.java)
             .putExtra(UnlockActivity.EXTRA_PACKAGE, pkg)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)

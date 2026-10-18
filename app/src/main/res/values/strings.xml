@@ -72,6 +72,11 @@
     <string name="quiet_needs_access">Needs notification access, above.</string>
     <!-- The name the phone's Do Not Disturb settings give the rule this switch sets -->
     <string name="quiet_rule_name">Ring for calls only</string>
+    <string name="torch_heading">Torch</string>
+    <string name="torch">Power pressed twice</string>
+    <!-- On the lock-screen panel while the torch is on; pressing it turns the torch off -->
+    <string name="torch_on_line">Torch on. Press to turn off.</string>
+    <string name="torch_note">Two quick presses of the power key turn the torch on or off, even while the phone is locked. While it is on, the lock screen says so; press that line to turn it off. Needs Glance switched on in Accessibility.</string>
 
     <!-- On the panel, when there were more of today's events than room: "+2 more" -->
     <string name="panel_more">+%1$d more</string>
