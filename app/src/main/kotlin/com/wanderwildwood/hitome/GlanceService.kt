@@ -17,6 +17,10 @@ class GlanceService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        // Connected again without an unbind in between: the old ones go first, or two torches
+        // would each answer the same two presses and cancel out.
+        panel?.stop()
+        torch?.stop()
         panel = LockscreenPanel(this).also { it.start() }
         torch = Torch(this).also { it.start() }
     }

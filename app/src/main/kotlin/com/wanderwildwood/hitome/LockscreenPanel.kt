@@ -280,7 +280,12 @@ class LockscreenPanel(private val service: AccessibilityService) :
         }
         top = fits.first
         val room = ((fits.second - top) / density).toInt().coerceAtLeast(0)
-        if (overlay != null && top == overlayTop && room == overlayRoom && trim == overlayTrimmed) return
+        // Same place and room, with only what fits changed (the torch's line come or gone): the
+        // panel redraws itself where it is, rather than going down to settle.
+        if (overlay != null && top == overlayTop && room == overlayRoom) {
+            overlayTrimmed = trim
+            return
+        }
         val now = SystemClock.uptimeMillis()
         // ⚠ Never moved while it is up. The lock screen rearranges itself as it goes away, and
         // a panel that followed it was taken down and put up again as a new window at the

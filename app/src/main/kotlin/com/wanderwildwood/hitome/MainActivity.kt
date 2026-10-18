@@ -306,6 +306,9 @@ private fun MainScreen() {
                     SwitchRow(title = stringResource(R.string.torch), note = stringResource(R.string.torch_note), checked = torchOn) {
                         torchOn = !torchOn
                         Torch.setEnabled(context, torchOn)
+                        // Its line on the lock screen goes with the switch, and Mudita's own
+                        // controls cannot see this torch: off with the switch, so it is never left on.
+                        if (!torchOn) Torch.off(context)
                     }
                 }
             }

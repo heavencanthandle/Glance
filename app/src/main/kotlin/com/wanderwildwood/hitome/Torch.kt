@@ -7,7 +7,7 @@ import android.content.IntentFilter
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
 import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,7 +28,12 @@ import kotlinx.coroutines.flow.StateFlow
 class Torch(private val context: Context) {
 
     private val camera = context.getSystemService(CameraManager::class.java)
-    private val handler = Handler(Looper.getMainLooper())
+
+    /**
+     * The presses are timed on a thread of their own: on the main thread they waited behind the
+     * panel's work on each wake, and a late second press read as no double press at all.
+     */
+    private var thread: HandlerThread? = null
     private var cameraId: String? = null
     private var lit = false
     private var lastChange = 0L
@@ -38,6 +43,14 @@ class Torch(private val context: Context) {
             if (id == cameraId) {
                 lit = enabled
                 litNow.value = enabled
+            }
+        }
+
+        // A camera app has taken the torch, and turned it off to do so.
+        override fun onTorchModeUnavailable(id: String) {
+            if (id == cameraId) {
+                lit = false
+                litNow.value = false
             }
         }
     }
@@ -57,17 +70,20 @@ class Torch(private val context: Context) {
     fun start() {
         cameraId = flashCamera(context)
         if (cameraId == null) return
+        val handler = Handler(HandlerThread(TAG).also { it.start(); thread = it }.looper)
         camera.registerTorchCallback(torchCallback, handler)
         context.registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
-        })
+        }, null, handler)
     }
 
     fun stop() {
         if (cameraId == null) return
         try { context.unregisterReceiver(screenReceiver) } catch (_: Exception) {}
         camera.unregisterTorchCallback(torchCallback)
+        thread?.quitSafely()
+        thread = null
         litNow.value = false
     }
 
