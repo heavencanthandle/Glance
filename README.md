@@ -96,7 +96,9 @@ hear the power key, so Glance watches the screen go on and off instead: two chan
 half a second are two presses. It is the white light, the camera's torch: Mudita's warm light
 answers only Mudita's own apps, and Mudita's control panel does not show this one as on. So while
 it is on, the panel says **Torch on** at the top; press it to turn the torch off. It is off until
-you turn it on, and works while Glance is on in Accessibility.
+you turn it on, and works while Glance is on in Accessibility. With fingerprint unlock on, press with a
+finger that is not enrolled: the power key reads fingerprints, and an enrolled one unlocks the
+phone.
 
 An overlay above the lock screen is a window only an accessibility service is allowed to add,
 which is why it needs that switch. Counting notifications needs notification access, which
