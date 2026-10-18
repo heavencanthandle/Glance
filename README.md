@@ -19,7 +19,8 @@ change it:
   fields left ticked on the card, allergies and conditions in bold.
 - **Today**, from [Calendar](https://github.com/wanderwildwood/koyomi): all-day events first,
   then what is still to come, with times. When there is not room for them all, it shows the
-  first and how many more. Without Calendar, turn on **Today's events** in Glance and it reads
+  first and how many more. Once today's are over, Calendar can name the next event, with its
+  day, if that is switched on in its settings. Without Calendar, turn on **Today's events** in Glance and it reads
   today itself: from Mudita's own Calendar, and from the phone's other calendars if you allow
   calendar access.
 - **The next dose**, from [Medicine](https://github.com/wanderwildwood/fukuyaku), once
