@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,9 +41,13 @@ import com.mudita.mmd.ThemeMMD
 import com.mudita.mmd.components.divider.HorizontalDividerMMD
 import androidx.compose.ui.text.font.FontWeight
 import com.mudita.mmd.components.switcher.SwitchMMD
+import com.mudita.mmd.components.radio_button.RadioButtonMMD
 import com.mudita.mmd.components.text.TextMMD
 import com.mudita.mmd.components.top_app_bar.TopAppBarMMD
 import com.wanderwildwood.hitome.ui.PagedColumn
+import com.wanderwildwood.hitome.ui.EInkDialog
+import com.wanderwildwood.hitome.ui.RestrictedHint
+import com.wanderwildwood.hitome.ui.RestrictedSettings
 import com.wanderwildwood.hitome.ui.AboutDialog
 import com.wanderwildwood.hitome.ui.BarButton
 import com.wanderwildwood.hitome.ui.GlancePanel
@@ -81,10 +86,16 @@ private fun MainScreen() {
         Glance.SOURCES.associateWith { context.packageManager.getLaunchIntentForPackage(it) != null }
     }
     val access = remember(checks) { Notices.accessGranted(context) }
+    // Asked for and still off on the way back: on Android 13+ that is restricted settings.
+    var askedService by rememberSaveable { mutableStateOf(false) }
+    var askedAccess by rememberSaveable { mutableStateOf(false) }
+    val restricted = remember(checks) { RestrictedSettings.blocked(context) }
     val chosenCount = remember(checks, choosing) { Notices.chosen(context).size }
     var showText by remember { mutableStateOf(Notices.showText(context)) }
     var quietOn by remember(checks) { mutableStateOf(Quiet.on(context)) }
     var torchOn by remember { mutableStateOf(Torch.enabled(context)) }
+    var textSize by remember { mutableIntStateOf(Glance.textSize(context)) }
+    var pickingSize by remember { mutableStateOf(false) }
     val hasTorch = remember { Torch.available(context) }
 
     var todayOn by remember { mutableStateOf(Today.enabled(context)) }
@@ -205,16 +216,23 @@ private fun MainScreen() {
                             .fillMaxWidth()
                             .padding(vertical = 8.dp)
                             .border(2.dp, MaterialTheme.colorScheme.onSurface)
-                            .clickable { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                            .clickable {
+                                askedService = true
+                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                            }
                             .padding(14.dp),
                     ) {
                         TextMMD(text = stringResource(R.string.service_off), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         TextMMD(text = stringResource(R.string.service_off_note), style = MaterialTheme.typography.labelSmall)
                     }
                 }
+                if (askedService && restricted) item { RestrictedHint() }
             }
             item {
                 Row(title = stringResource(R.string.preview), value = stringResource(R.string.preview_note), chevron = true) { previewing = true }
+            }
+            item {
+                Row(title = stringResource(R.string.text_size), value = stringResource(TEXT_SIZE_NAMES[textSize])) { pickingSize = true }
             }
 
             // Each heading is drawn in the item of the row under it, so a page never ends on a
@@ -256,8 +274,13 @@ private fun MainScreen() {
                     title = stringResource(R.string.access_title),
                     value = stringResource(if (access) R.string.access_on_short else R.string.access_off_note),
                     chevron = true,
-                ) { openNotificationAccess(context) }
+                ) {
+                    askedAccess = true
+                    openNotificationAccess(context)
+                }
             }
+            // With the panel on, restricted settings were already allowed: nothing to say here.
+            if (askedAccess && !access && !serviceOn && restricted) item { RestrictedHint() }
             if (access) {
                 item {
                     Row(
@@ -293,6 +316,7 @@ private fun MainScreen() {
                     checked = quietOn,
                 ) {
                     if (!Quiet.allowed(context)) {
+                        askedAccess = true
                         openNotificationAccess(context)
                         return@SwitchRow
                     }
@@ -315,7 +339,30 @@ private fun MainScreen() {
         }
     }
     if (aboutOpen) AboutDialog { aboutOpen = false }
+    if (pickingSize) {
+        EInkDialog(onDismiss = { pickingSize = false }) {
+            TextMMD(text = stringResource(R.string.text_size), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            TEXT_SIZE_NAMES.forEachIndexed { i, name ->
+                androidx.compose.foundation.layout.Row(
+                    Modifier.fillMaxWidth().clickable {
+                        textSize = i
+                        Glance.setTextSize(context, i)
+                        pickingSize = false
+                    }.padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButtonMMD(selected = i == textSize, onClick = null)
+                    Spacer(Modifier.width(8.dp))
+                    TextMMD(text = stringResource(name), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
 }
+
+/** The names of [Glance.TEXT_SCALES], in the same order. */
+private val TEXT_SIZE_NAMES = listOf(R.string.text_size_normal, R.string.text_size_large, R.string.text_size_larger)
 
 /** A section's name, in bold capitals over a rule, so the screen reads as its parts. */
 @Composable
@@ -418,13 +465,15 @@ private fun PreviewScreen(serviceOn: Boolean, onBack: () -> Unit) {
                 TextMMD(text = stringResource(R.string.preview_empty), style = MaterialTheme.typography.bodyMedium)
             } else {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                    Box(Modifier.width(PANEL_WIDTH_DP.dp)) {
+                    val scale = Glance.textScale(context)
+                    Box(Modifier.width((PANEL_WIDTH_DP * scale).dp)) {
                         GlancePanel(
                             sections = shown,
                             notices = notices,
                             order = Glance.order(context),
-                            roomDp = PREVIEW_ROOM_DP,
+                            roomDp = (PREVIEW_ROOM_DP / scale).toInt(),
                             onOpen = {},
+                            scale = scale,
                         )
                     }
                 }

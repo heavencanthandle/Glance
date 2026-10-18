@@ -7,6 +7,11 @@
     <!-- Main screen -->
     <string name="service_off">The panel is off</string>
     <string name="service_off_note">Turn on Glance in Accessibility. It also needs a screen lock, even just Swipe.</string>
+    <!-- How large the panel draws on the lock screen; Normal is the size it has always had. -->
+    <string name="text_size">Text size</string>
+    <string name="text_size_normal">Normal</string>
+    <string name="text_size_large">Large</string>
+    <string name="text_size_larger">Larger</string>
     <string name="service_on">The panel is on</string>
     <string name="service_on_note">It shows on the lock screen. Turn it off in Accessibility.</string>
     <string name="sources_heading">On the lock screen</string>
@@ -101,4 +106,9 @@
     <string name="about_feed_the_llamas">feed the llamas</string>
     <string name="about_no_browser">There is no browser on this phone to open that with.</string>
     <string name="about_close">Close</string>
+
+    <!-- Android 13+ keeps an app installed from a file out of Accessibility, notification access
+         and the default phone/texting roles until App info, then ⋮, then Allow restricted settings. -->
+    <string name="restricted_hint">Android blocks this for apps installed from a file. Open App info, tap ⋮, then Allow restricted settings, and try again.</string>
+    <string name="restricted_app_info">App info</string>
 </resources>

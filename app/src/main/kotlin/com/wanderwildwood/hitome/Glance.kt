@@ -132,6 +132,21 @@ object Glance {
         return start + DEFAULT_ORDER.filter { it !in start }
     }
 
+    private const val KEY_TEXT_SIZE = "text_size"
+
+    /** The panel's sizes, as multiples of its first one: Normal, Large, Larger. */
+    val TEXT_SCALES = floatArrayOf(1f, 1.15f, 1.3f)
+
+    /** Which of [TEXT_SCALES] the panel is drawn at; Normal until another is chosen. */
+    fun textSize(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_TEXT_SIZE, 0).coerceIn(0, TEXT_SCALES.lastIndex)
+
+    fun setTextSize(context: Context, size: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt(KEY_TEXT_SIZE, size).apply()
+    }
+
+    fun textScale(context: Context): Float = TEXT_SCALES[textSize(context)]
+
     fun setOrder(context: Context, order: List<String>) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_ORDER, order.joinToString(",")).apply()

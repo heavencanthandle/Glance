@@ -230,6 +230,10 @@ class LockscreenPanel(private val service: AccessibilityService) :
     /** Adds the panel, or moves it when what the lock screen shows above it has changed. */
     private fun place() {
         val density = service.resources.displayMetrics.density
+        // The panel's own unit: a dp, larger by the chosen text size. Its heights and its width
+        // are counted in it; the lock screen's items and the gaps round it stay in the phone's.
+        val scale = Glance.textScale(service)
+        val unit = density * scale
         val bottom = lockScreenBottom()
         // ⚠ The lock screen's own items gone, on a lock screen that had them, is the lock screen
         // going: Android still says "locked" for up to 0.6 s after it has visibly gone, and a
@@ -264,7 +268,7 @@ class LockscreenPanel(private val service: AccessibilityService) :
         val order = shownOrder()
         val whole = leastDp(shownSections(), notices.value, order)
         val part = firstDp(shownSections(), notices.value, order)
-        fun fitting(least: Int) = gaps.firstOrNull { (a, b) -> (b - a) / density >= least }
+        fun fitting(least: Int) = gaps.firstOrNull { (a, b) -> (b - a) / unit >= least }
         // Without Katapult's widgets the panel takes what room there is and never hides: on a
         // tight lock screen (Mudita's music player, a charging line) it keeps what fits, in order.
         val (fits, trim) = when {
@@ -279,7 +283,7 @@ class LockscreenPanel(private val service: AccessibilityService) :
             return
         }
         top = fits.first
-        val room = ((fits.second - top) / density).toInt().coerceAtLeast(0)
+        val room = ((fits.second - top) / unit).toInt().coerceAtLeast(0)
         // Same place and room, with only what fits changed (the torch's line come or gone): the
         // panel redraws itself where it is, rather than going down to settle.
         if (overlay != null && top == overlayTop && room == overlayRoom) {
@@ -319,6 +323,7 @@ class LockscreenPanel(private val service: AccessibilityService) :
                     order = shownOrder(),
                     roomDp = room,
                     onOpen = { pkg -> open(pkg) },
+                    scale = scale,
                 )
             }
         }
@@ -329,7 +334,7 @@ class LockscreenPanel(private val service: AccessibilityService) :
             // unlock begins. See [touchedAway].
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-            width = (WIDTH_DP * density).toInt()
+            width = (WIDTH_DP * unit).toInt()
             height = WindowManager.LayoutParams.WRAP_CONTENT
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             windowAnimations = R.style.PanelWindow

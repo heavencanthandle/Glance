@@ -79,9 +79,14 @@ nowhere, it does not show; dragging Katapult's notifications lower makes room.
    screen to draw on.
 2. Open Glance and press **The panel is off**: it opens Android's Accessibility settings. Turn on
    **Glance on the lock screen**.
+   Installed from a file on Android 13 or later, Android may refuse that switch (and notification
+   access) at first: open App info, tap ⋮, then **Allow restricted settings**, and try again.
+   Glance says so, with an App info button, when the switch came back off.
 
 3. **Preview** shows what the lock screen would show now, so each switch can be tried without
    locking the phone.
+   **Text size** draws the panel at Normal, Large or Larger: the words, headings and rules grow
+   together, and the panel still stops above the music strip and the padlock.
 4. For other apps: press **Notifications are not counted**, turn on notification access for
    Glance, then **Choose apps**. Nothing is counted until you choose at least one.
 

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.mudita.mmd.ThemeMMD
 import com.mudita.mmd.components.text.TextMMD
@@ -55,45 +57,52 @@ fun GlancePanel(
     order: List<String>,
     roomDp: Int,
     onOpen: (String) -> Unit,
+    scale: Float = 1f,
 ) {
-    ThemeMMD(colorScheme = monochrome) {
-        // With the words shown, each app has a line of its own; without, the names share lines.
-        val withText = notices.any { it.text != null }
-        // Without words, Messaging's and Email's entries have nothing to add to their counts.
-        val allNotices = if (withText) notices else notices.filter { it.counted }
-        val kept = chosen(sections, allNotices, order, roomDp)
-        val keptSections = sections.filter { it.key in kept }
-        @Suppress("NAME_SHADOWING")
-        val notices = if (Glance.UNREAD in kept) allNotices else emptyList()
-        val counts = keptSections.filter { it.key == Glance.UNREAD }
-        val noticeRows = if (withText) emptyList() else packNotices(notices)
-        val textLines = if (withText) textLines(notices) else emptyList()
-        val noticeLines = noticeRows.size + textLines.size
-        val footDp = if (counts.isEmpty() && noticeLines == 0) 0
-            else RULE_DP + PAD_DP + (if (counts.isNotEmpty()) LINE_DP else 0) + noticeLines * LINE_DP
-        val fitted = fit(keptSections.filter { it.key != Glance.UNREAD }, footDp, roomDp)
-        Column(Modifier.fillMaxWidth().background(Color.White)) {
-            order.forEach { key ->
-                if (key == Glance.UNREAD) {
-                    if (counts.isNotEmpty() || noticeLines > 0) Foot(counts, textLines, noticeRows, onOpen)
-                    return@forEach
-                }
-                fitted.filter { it.key == key }.forEach { section ->
-                    Rule()
-                    Column(Modifier.fillMaxWidth().clickable { onOpen(section.packageName) }.padding(vertical = 2.dp)) {
-                        section.heading?.let {
-                            TextMMD(
-                                text = it.uppercase(),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                            )
+    // A larger text size draws the whole panel larger, type, rules and spacing together, so it
+    // is laid out exactly as at Normal: [roomDp] and every height here are in the panel's own
+    // units, which are the phone's dp times [scale].
+    val outer = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(outer.density * scale, outer.fontScale)) {
+        ThemeMMD(colorScheme = monochrome) {
+            // With the words shown, each app has a line of its own; without, the names share lines.
+            val withText = notices.any { it.text != null }
+            // Without words, Messaging's and Email's entries have nothing to add to their counts.
+            val allNotices = if (withText) notices else notices.filter { it.counted }
+            val kept = chosen(sections, allNotices, order, roomDp)
+            val keptSections = sections.filter { it.key in kept }
+            @Suppress("NAME_SHADOWING")
+            val notices = if (Glance.UNREAD in kept) allNotices else emptyList()
+            val counts = keptSections.filter { it.key == Glance.UNREAD }
+            val noticeRows = if (withText) emptyList() else packNotices(notices)
+            val textLines = if (withText) textLines(notices) else emptyList()
+            val noticeLines = noticeRows.size + textLines.size
+            val footDp = if (counts.isEmpty() && noticeLines == 0) 0
+                else RULE_DP + PAD_DP + (if (counts.isNotEmpty()) LINE_DP else 0) + noticeLines * LINE_DP
+            val fitted = fit(keptSections.filter { it.key != Glance.UNREAD }, footDp, roomDp)
+            Column(Modifier.fillMaxWidth().background(Color.White)) {
+                order.forEach { key ->
+                    if (key == Glance.UNREAD) {
+                        if (counts.isNotEmpty() || noticeLines > 0) Foot(counts, textLines, noticeRows, onOpen)
+                        return@forEach
+                    }
+                    fitted.filter { it.key == key }.forEach { section ->
+                        Rule()
+                        Column(Modifier.fillMaxWidth().clickable { onOpen(section.packageName) }.padding(vertical = 2.dp)) {
+                            section.heading?.let {
+                                TextMMD(
+                                    text = it.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                )
+                            }
+                            section.lines.forEach { line -> LineRow(line) }
                         }
-                        section.lines.forEach { line -> LineRow(line) }
                     }
                 }
+                if (fitted.isNotEmpty() || counts.isNotEmpty() || noticeLines > 0) Rule()
             }
-            if (fitted.isNotEmpty() || counts.isNotEmpty() || noticeLines > 0) Rule()
         }
     }
 }
