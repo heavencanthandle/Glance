@@ -53,6 +53,15 @@ on - what their newest notifications say. Each app's switch,
 and the list of apps you choose, is there for exactly this. Pressing the panel
 asks for the phone's lock before opening anything, so a PIN still protects what is behind it.
 
+## What it hands on
+
+Glance hands the panel's lines to one app only, inkOS:wndr (`com.wanderwildwood.iori`), to draw
+on its home screen, and only when that app is signed with inkOS:wndr's own release certificate:
+the same lines from the apps that take part, in your order and with your switches here, and for
+each app whether it shows and why (on, off in the app, off in Glance, not installed, needs an
+update, did not answer). Never other apps' notifications. Any other app that asks gets nothing.
+The code is `app/src/main/kotlin/com/wanderwildwood/hitome/PanelForHome.kt`.
+
 ## What it stores
 
 The list of apps you chose, whether to show what they say, and whether to read today's events,

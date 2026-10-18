@@ -1,6 +1,7 @@
 package com.wanderwildwood.hitome
 
 import android.content.Context
+import android.database.Cursor
 import android.net.Uri
 
 /**
@@ -163,8 +164,8 @@ object Glance {
      * events are Calendar's own while it is installed, and otherwise Glance's reading ([Today]).
      */
     fun readAll(context: Context): List<Section> {
-        val calendarInstalled = context.packageManager.getLaunchIntentForPackage(CALENDAR) != null
-        return order(context).flatMap { if (it == UNREAD) COUNTS else listOf(it) }.mapNotNull { pkg ->
+        val calendarInstalled = calendarInstalled(context)
+        return sources(order(context)).mapNotNull { pkg ->
             when {
                 pkg in OPT_IN && !switchedOn(context, pkg) -> null
                 pkg == CALENDAR && !calendarInstalled -> Today.read(context)?.copy(key = CALENDAR)
@@ -173,31 +174,40 @@ object Glance {
         }
     }
 
+    /** The sources one by one in [order], the counts' place standing for both of them. */
+    fun sources(order: List<String>): List<String> = order.flatMap { if (it == UNREAD) COUNTS else listOf(it) }
+
+    fun calendarInstalled(context: Context): Boolean =
+        context.packageManager.getLaunchIntentForPackage(CALENDAR) != null
+
     /** Null when the app is not installed, has nothing to say, or has its switch off. */
     fun read(context: Context, packageName: String): Section? = try {
-        context.contentResolver.query(uri(packageName), COLUMNS, null, null, null)?.use { c ->
-            val heading = c.getColumnIndex("heading")
-            val lead = c.getColumnIndex("lead")
-            val text = c.getColumnIndex("text")
-            val bold = c.getColumnIndex("bold")
-            if (text < 0) return null
-            var title: String? = null
-            val lines = mutableListOf<Line>()
-            while (c.moveToNext()) {
-                if (title == null && heading >= 0) title = c.getString(heading)?.takeIf { it.isNotBlank() }
-                val t = c.getString(text)?.takeIf { it.isNotBlank() } ?: continue
-                lines += Line(
-                    lead = if (lead >= 0) c.getString(lead)?.takeIf { it.isNotBlank() } else null,
-                    text = t,
-                    bold = bold >= 0 && c.getInt(bold) == 1,
-                )
-            }
-            if (lines.isEmpty()) null else Section(packageName, title, lines)
-        }
+        context.contentResolver.query(uri(packageName), COLUMNS, null, null, null)?.use { c -> section(c, packageName) }
     } catch (_: Exception) {
         // Not installed, too old to have a provider, or it refused: in every case, nothing.
         null
     }
 
-    private val COLUMNS = arrayOf("heading", "lead", "text", "bold")
+    /** The section an app's answer makes; null when it has no lines, or no `text` column. */
+    fun section(c: Cursor, packageName: String): Section? {
+        val heading = c.getColumnIndex("heading")
+        val lead = c.getColumnIndex("lead")
+        val text = c.getColumnIndex("text")
+        val bold = c.getColumnIndex("bold")
+        if (text < 0) return null
+        var title: String? = null
+        val lines = mutableListOf<Line>()
+        while (c.moveToNext()) {
+            if (title == null && heading >= 0) title = c.getString(heading)?.takeIf { it.isNotBlank() }
+            val t = c.getString(text)?.takeIf { it.isNotBlank() } ?: continue
+            lines += Line(
+                lead = if (lead >= 0) c.getString(lead)?.takeIf { it.isNotBlank() } else null,
+                text = t,
+                bold = bold >= 0 && c.getInt(bold) == 1,
+            )
+        }
+        return if (lines.isEmpty()) null else Section(packageName, title, lines)
+    }
+
+    val COLUMNS = arrayOf("heading", "lead", "text", "bold")
 }

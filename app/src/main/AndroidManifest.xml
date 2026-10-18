@@ -30,6 +30,8 @@
         <package android:name="com.wanderwildwood.zeni" />
         <package android:name="com.wanderwildwood.kotozute" />
         <package android:name="com.wanderwildwood.tayori" />
+        <!-- inkOS:wndr, the one app the panel's lines are handed to (PanelForHome). -->
+        <package android:name="com.wanderwildwood.iori" />
         <package android:name="com.mudita.calendar" />
         <provider android:authorities="com.mudita.calendar" />
         <!-- Whatever app is the calendar, to open when today's events are pressed. -->
@@ -92,6 +94,13 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- The panel's lines for inkOS:wndr's home screen. Exported with no permission because
+             it checks the caller's package and signing certificate itself; see PanelForHome.kt. -->
+        <provider
+            android:name=".PanelForHome"
+            android:authorities="com.wanderwildwood.hitome.panel"
+            android:exported="true" />
     </application>
 
 </manifest>
