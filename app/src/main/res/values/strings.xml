@@ -51,6 +51,9 @@
     <string name="hotspot_on">On. Press to turn it off.</string>
     <string name="hotspot_off">Off. Press to turn it on.</string>
     <string name="panel_hotspot">Hotspot</string>
+    <string name="camera_title">Camera</string>
+    <string name="camera_note">Unlocks and opens the camera. A swipe lock opens it at once; a PIN asks first.</string>
+    <string name="panel_camera">Camera</string>
     <string name="light_title">Light</string>
     <string name="light_note">On the lock screen, without unlocking. The camera\'s lamp, and nothing is recorded.</string>
     <string name="light_lamp">The lamp</string>

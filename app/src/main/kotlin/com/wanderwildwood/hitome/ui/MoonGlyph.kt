@@ -14,12 +14,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * The moon for the utilities row. Black ink is the sunlit part and the paper is the
- * shadow, so the dark side of the moon is the light part of the icon. A waxing moon
- * is inked on the right.
+ * The moon for the utilities row, drawn like Almanac's and a printed calendar's: the
+ * paper is the sunlit part and black ink is the shadow. A new moon is a black disk, a
+ * full moon an empty ring, and a waxing moon is bright on the right.
  *
- * Filling the shadow instead reads backwards: the side that is dark in the sky comes
- * out as the dark mark on the page.
+ * Inking the sunlit part instead reads backwards: a waxing crescent comes out as a
+ * black sliver on the right, which looks like the shadow side.
  */
 @Composable
 fun MoonGlyph(phase: Moon.Phase, modifier: Modifier = Modifier) {
@@ -29,30 +29,33 @@ fun MoonGlyph(phase: Moon.Phase, modifier: Modifier = Modifier) {
         if (r <= 0f) return@Canvas
         val c = Offset(size.width / 2f, size.height / 2f)
         val t = phase.illumination
-        if (t >= FULL) {
+        if (t <= NEW) {
             drawCircle(Color.Black, r, c)
             return@Canvas
         }
-        if (t > NEW) {
-            drawPath(limbPath(c, r, terminatorK(t), phase.waxing), Color.Black)
+        if (t < FULL) {
+            drawPath(shadowPath(c, r, terminatorK(t), phase.waxing), Color.Black)
         }
         drawCircle(Color.Black, r, c, style = Stroke(stroke))
     }
 }
 
-/** The right limb, top to bottom, then the terminator back. [waxing] false mirrors it. */
-private fun limbPath(c: Offset, r: Float, k: Float, waxing: Boolean): Path {
-    val side = if (waxing) 1f else -1f
+/**
+ * The dark limb, top to bottom, then the terminator back. Waxing, the dark limb is the
+ * left one; [waxing] false mirrors it.
+ */
+private fun shadowPath(c: Offset, r: Float, k: Float, waxing: Boolean): Path {
+    val dark = if (waxing) -1f else 1f
     val path = Path()
     for (i in 0..STEPS) {
         val phi = Math.PI * i / STEPS
-        val x = c.x + side * sin(phi).toFloat() * r
+        val x = c.x + dark * sin(phi).toFloat() * r
         val y = c.y - cos(phi).toFloat() * r
         if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
     }
     for (i in STEPS downTo 0) {
         val phi = Math.PI * i / STEPS
-        val x = c.x + side * k * sin(phi).toFloat() * r
+        val x = c.x - dark * k * sin(phi).toFloat() * r
         val y = c.y - cos(phi).toFloat() * r
         path.lineTo(x, y)
     }
@@ -60,10 +63,10 @@ private fun limbPath(c: Offset, r: Float, k: Float, waxing: Boolean): Path {
     return path
 }
 
-/** Below this the lit sliver is a hair, so the moon is an empty ring. */
+/** Below this the lit sliver is a hair, so the moon is a black disk. */
 private const val NEW = 0.02f
 
-/** Above this the shadow is a hair, so the moon is a black disk. */
+/** Above this the shadow is a hair, so the moon is an empty ring. */
 private const val FULL = 0.98f
 
 private const val STEPS = 64

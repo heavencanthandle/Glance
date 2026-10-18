@@ -111,6 +111,7 @@ private fun MainScreen() {
     var utilitiesOn by remember(checks) { mutableStateOf(Utilities.master(context)) }
     var moonOn by remember(checks) { mutableStateOf(Utilities.moon(context)) }
     var hotspotOn by remember(checks) { mutableStateOf(Hotspot.enabled(context)) }
+    var cameraOn by remember(checks) { mutableStateOf(Camera.enabled(context)) }
     var lightOn by remember(checks) { mutableStateOf(Torch.enabled(context)) }
     val lamp by Torch.lamp.collectAsState()
     val sharing by Hotspot.on.collectAsState()
@@ -359,6 +360,16 @@ private fun MainScreen() {
                             value = stringResource(if (sharing) R.string.hotspot_on else R.string.hotspot_off),
                             chevron = false,
                         ) { Hotspot.toggle(context) }
+                    }
+                }
+                item {
+                    SwitchRow(
+                        title = stringResource(R.string.camera_title),
+                        note = stringResource(R.string.camera_note),
+                        checked = cameraOn,
+                    ) {
+                        cameraOn = !cameraOn
+                        Camera.setEnabled(context, cameraOn)
                     }
                 }
             }
@@ -620,12 +631,20 @@ private fun PreviewScreen(serviceOn: Boolean, cameraGranted: Boolean, onBack: ()
             val light = rowOn && Torch.enabled(context) && Torch.hasFlash(context) && cameraGranted
             val moon = rowOn && Utilities.moon(context)
             val hotspot = rowOn && Hotspot.enabled(context)
+            val camera = if (rowOn && Camera.enabled(context)) Camera.app(context) else null
             val icons = UtilityIcons(
                 lightOn = if (light) lamp else null,
                 onLight = { Torch.toggle(context) },
                 phase = if (moon) phase else null,
                 hotspotOn = if (hotspot) sharing else null,
                 onHotspot = { Hotspot.toggle(context) },
+                onCamera = camera?.let { pkg ->
+                    {
+                        context.packageManager.getLaunchIntentForPackage(pkg)?.let {
+                            try { context.startActivity(it) } catch (_: Exception) {}
+                        }
+                    }
+                },
             )
             if (shown.isEmpty() && notices.isEmpty() && size == Clock.Size.SYSTEM && !icons.shown) {
                 TextMMD(text = stringResource(R.string.preview_empty), style = MaterialTheme.typography.bodyMedium)

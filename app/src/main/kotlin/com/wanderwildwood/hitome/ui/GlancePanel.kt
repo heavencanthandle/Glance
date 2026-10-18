@@ -112,8 +112,9 @@ fun GlancePanel(
 }
 
 /**
- * The lamp, the moon, and the hotspot, as icons on one line. A null lamp or hotspot is left
- * off the row. A null phase draws no moon. Pressing the lamp or the hotspot does not unlock.
+ * The lamp, the moon, the hotspot, and the camera, as icons on one line. A null lamp, hotspot
+ * or camera is left off the row. A null phase draws no moon. Pressing the lamp or the hotspot
+ * does not unlock; pressing the camera unlocks and opens it.
  */
 data class UtilityIcons(
     val lightOn: Boolean? = null,
@@ -121,8 +122,9 @@ data class UtilityIcons(
     val phase: Moon.Phase? = null,
     val hotspotOn: Boolean? = null,
     val onHotspot: () -> Unit = {},
+    val onCamera: (() -> Unit)? = null,
 ) {
-    val shown: Boolean get() = lightOn != null || phase != null || hotspotOn != null
+    val shown: Boolean get() = lightOn != null || phase != null || hotspotOn != null || onCamera != null
 }
 
 @Composable
@@ -143,6 +145,11 @@ private fun UtilityRow(icons: UtilityIcons) {
         if (icons.hotspotOn != null) {
             UtilityButton(stringResource(R.string.panel_hotspot), icons.onHotspot) {
                 HotspotIcon(icons.hotspotOn)
+            }
+        }
+        if (icons.onCamera != null) {
+            UtilityButton(stringResource(R.string.panel_camera), icons.onCamera) {
+                CameraIcon()
             }
         }
     }
@@ -204,6 +211,30 @@ private fun HotspotIcon(on: Boolean) {
                 style = stroke,
             )
         }
+    }
+}
+
+/** A camera: a body with a hump for the viewfinder, and a ring for the lens. */
+@Composable
+private fun CameraIcon() {
+    Canvas(Modifier.size(28.dp)) {
+        val ink = Color.Black
+        val w = size.width
+        val h = size.height
+        val stroke = Stroke(width = w * 0.07f)
+        val body = Path().apply {
+            moveTo(w * 0.08f, h * 0.30f)
+            lineTo(w * 0.32f, h * 0.30f)
+            lineTo(w * 0.38f, h * 0.20f)
+            lineTo(w * 0.62f, h * 0.20f)
+            lineTo(w * 0.68f, h * 0.30f)
+            lineTo(w * 0.92f, h * 0.30f)
+            lineTo(w * 0.92f, h * 0.80f)
+            lineTo(w * 0.08f, h * 0.80f)
+            close()
+        }
+        drawPath(body, ink, style = stroke)
+        drawCircle(ink, radius = w * 0.15f, center = Offset(w * 0.5f, h * 0.55f), style = stroke)
     }
 }
 

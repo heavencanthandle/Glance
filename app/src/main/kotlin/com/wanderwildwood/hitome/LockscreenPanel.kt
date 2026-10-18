@@ -297,11 +297,16 @@ class LockscreenPanel(private val service: AccessibilityService) :
             ContextCompat.checkSelfPermission(service, android.Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
 
-    /** The icon row: lamp, moon, hotspot. Each one can be off on its own. */
+    /** The camera app to open, when its icon is on and the phone has one. */
+    private fun cameraApp(): String? =
+        if (Utilities.master(service) && Camera.enabled(service)) Camera.app(service) else null
+
+    /** The icon row: lamp, moon, hotspot, camera. Each one can be off on its own. */
     private fun wantsUtilities(): Boolean {
         if (!Utilities.master(service)) return false
         if (wantsLight()) return true
         if (Hotspot.enabled(service)) return true
+        if (cameraApp() != null) return true
         return Utilities.moon(service) && moonPhase.value != null
     }
 
@@ -311,6 +316,7 @@ class LockscreenPanel(private val service: AccessibilityService) :
         phase = if (Utilities.master(service) && Utilities.moon(service)) moonPhase.value else null,
         hotspotOn = if (Utilities.master(service) && Hotspot.enabled(service)) hotspot.value else null,
         onHotspot = { Hotspot.toggle(service) },
+        onCamera = cameraApp()?.let { pkg -> { open(pkg) } },
     )
 
     /** Adds the panel, or moves it when what the lock screen shows above it has changed. */

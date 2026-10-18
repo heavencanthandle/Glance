@@ -58,8 +58,9 @@ icon does not: the lamp and the hotspot turn over and the phone stays locked.
 
 **Utilities.** One row of icons under the clock, or under the music controls when they are
 showing. The row has a switch, and so does each icon. **Light** uses the camera's lamp and
-takes no pictures. **Moon** is Almanac's phase, ink on the sunlit side. **Hotspot** asks the
-phone to start or stop the internet hotspot; Android may refuse that. A phone with no lamp
+takes no pictures. **Moon** is Almanac's phase, drawn like Almanac's: paper is the sunlit side, ink the shadow. **Hotspot** asks the
+phone to start or stop the internet hotspot; Android may refuse that. **Camera** unlocks the
+phone and opens the camera, the same as pressing an app's lines. A phone with no lamp
 does not show the lamp.
 
 **Time and date.** The phone's own clock stays. A chooser for the size is written and not

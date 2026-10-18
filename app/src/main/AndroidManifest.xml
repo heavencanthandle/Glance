@@ -48,6 +48,10 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.APP_CALENDAR" />
         </intent>
+        <!-- The camera app, for the camera on the utilities row. -->
+        <intent>
+            <action android:name="android.media.action.STILL_IMAGE_CAMERA" />
+        </intent>
         <!-- The apps there are to choose from, for counting their notifications. -->
         <intent>
             <action android:name="android.intent.action.MAIN" />
