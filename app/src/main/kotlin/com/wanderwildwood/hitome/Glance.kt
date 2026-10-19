@@ -82,6 +82,7 @@ object Glance {
         val now = prefs.getStringSet(KEY_ON, emptySet())!!.toMutableSet()
         if (on) now += packageName else now -= packageName
         prefs.edit().putStringSet(KEY_ON, now).apply()
+        PanelForHome.changed(context)
     }
 
     fun uri(packageName: String): Uri = Uri.parse("content://$packageName.glance/lines")
@@ -151,6 +152,7 @@ object Glance {
     fun setOrder(context: Context, order: List<String>) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_ORDER, order.joinToString(",")).apply()
+        PanelForHome.changed(context)
     }
 
     /** [order] with the part at [from] moved to [to]. */

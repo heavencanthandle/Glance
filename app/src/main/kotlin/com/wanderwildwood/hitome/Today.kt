@@ -42,6 +42,7 @@ object Today {
 
     fun setEnabled(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ON, on).apply()
+        PanelForHome.changed(context)
     }
 
     fun canReadCalendars(context: Context): Boolean =

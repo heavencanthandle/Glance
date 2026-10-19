@@ -59,7 +59,8 @@ Glance hands the panel's lines to one app only, inkOS:wndr (`com.wanderwildwood.
 on its home screen, and only when that app is signed with inkOS:wndr's own release certificate:
 the same lines from the apps that take part, in your order and with your switches here, and for
 each app whether it shows and why (on, off in the app, off in Glance, not installed, needs an
-update, did not answer). Never other apps' notifications. Any other app that asks gets nothing.
+update, did not answer); and, when today's events are on here on a phone without Calendar, the
+events Glance reads from the phone's calendars. Never other apps' notifications. Any other app that asks gets nothing.
 The code is `app/src/main/kotlin/com/wanderwildwood/hitome/PanelForHome.kt`.
 
 ## What it stores
