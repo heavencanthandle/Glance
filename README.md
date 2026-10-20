@@ -35,7 +35,8 @@ change it:
 - **What is playing**, from [Music Box](https://github.com/wanderwildwood/jimeikin) and
   [Audio Reading](https://github.com/wanderwildwood/mimidoku): the song and who sings it, or the
   book and its chapter (or the time left in a book with no chapters), and whether it is paused.
-  Nothing once playback stops.
+  Nothing once playback stops, and nothing while that app's own lock-screen controls are on,
+  since they already say it.
 - **The bitcoin price**, from [Bitcoin](https://github.com/wanderwildwood/zeni), off until
   switched on in both Bitcoin's App Settings and Glance: the price and how it moved in a day.
   Never a balance.

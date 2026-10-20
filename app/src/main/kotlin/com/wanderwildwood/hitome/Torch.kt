@@ -60,6 +60,7 @@ class Torch(private val context: Context) {
             val now = SystemClock.elapsedRealtime()
             val gap = now - lastChange
             lastChange = now
+            if (gap < 1000L) Log.i(TAG, "screen changes ${gap} ms apart")
             if (!enabled(context) || gap > WINDOW_MS) return
             // A third quick press starts afresh rather than undoing the second.
             lastChange = 0L
@@ -102,8 +103,11 @@ class Torch(private val context: Context) {
         private const val PREFS = "torch"
         private const val KEY_ON = "on"
 
-        /** The longest gap between the two presses, measured as the screen changes. */
-        private const val WINDOW_MS = 450L
+        /**
+         * The longest gap between the two presses, measured as the screen changes. At 450 ms,
+         * locking the phone and waking it again to look lit the torch.
+         */
+        private const val WINDOW_MS = 300L
 
         /** The panel's part for the torch, which is not one of the apps in [Glance.order]. */
         const val PANEL_KEY = "torch"

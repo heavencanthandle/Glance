@@ -1,8 +1,10 @@
 package com.wanderwildwood.hitome
 
+import android.content.ComponentName
 import android.content.Context
 import android.database.Cursor
 import android.net.Uri
+import android.provider.Settings
 
 /**
  * What an app has to say on the lock screen, asked of the app itself.
@@ -83,6 +85,19 @@ object Glance {
         if (on) now += packageName else now -= packageName
         prefs.edit().putStringSet(KEY_ON, now).apply()
         PanelForHome.changed(context)
+    }
+
+    /** The apps that say what is playing, each of which can draw its own controls on the lock screen. */
+    val PLAYERS = setOf("com.wanderwildwood.jimeikin", "com.wanderwildwood.mimidoku")
+
+    /**
+     * Whether [packageName] has its own lock-screen controls switched on, an accessibility service
+     * of its own. They already name what is playing, so the panel leaves that line out.
+     */
+    fun ownControlsOn(context: Context, packageName: String): Boolean {
+        val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+            ?: return false
+        return enabled.split(':').any { ComponentName.unflattenFromString(it)?.packageName == packageName }
     }
 
     fun uri(packageName: String): Uri = Uri.parse("content://$packageName.glance/lines")
@@ -170,6 +185,7 @@ object Glance {
         return sources(order(context)).mapNotNull { pkg ->
             when {
                 pkg in OPT_IN && !switchedOn(context, pkg) -> null
+                pkg in PLAYERS && ownControlsOn(context, pkg) -> null
                 pkg == CALENDAR && !calendarInstalled -> Today.read(context)?.copy(key = CALENDAR)
                 else -> read(context, pkg)
             }
