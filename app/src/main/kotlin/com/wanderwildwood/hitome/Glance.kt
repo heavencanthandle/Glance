@@ -1,6 +1,8 @@
 package com.wanderwildwood.hitome
 
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 
 /**
@@ -31,14 +33,15 @@ object Glance {
 
     /**
      * Stacked sections, top to bottom until the order is changed: the emergency card, today's
-     * events, the next dose, the weather, pinned notes, today's tickets, then what is playing -
-     * a song, then a book - and last the bitcoin price.
+     * events, the next dose, the weather, the almanac, pinned notes, today's tickets, then what
+     * is playing - a song, then a book - and last the bitcoin price.
      */
     val STACKED = listOf(
         "com.wanderwildwood.zatsuno",
         "com.wanderwildwood.koyomi",
         "com.wanderwildwood.fukuyaku",
         "com.wanderwildwood.soramoyo",
+        "com.heavencanthandle.almanac",
         "com.wanderwildwood.oboegaki",
         "com.wanderwildwood.satsuire",
         "com.wanderwildwood.jimeikin",
@@ -83,6 +86,37 @@ object Glance {
         prefs.edit().putStringSet(KEY_ON, now).apply()
     }
 
+    /**
+     * Installed apps, besides [SOURCES], that export a provider at `<package>.glance`.
+     * They stay off the panel until switched on here, the same way the emergency card does:
+     * installing an app does not put it on the lock screen.
+     */
+    fun discovered(context: Context): List<String> {
+        val pm = context.packageManager
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return try {
+            pm.queryIntentActivities(launcher, 0)
+                .map { it.activityInfo.packageName }
+                .distinct()
+                .filter { it != context.packageName && it !in SOURCES }
+                .filter { hasGlanceProvider(pm, it) }
+                .sorted()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /** True when [packageName] exports a provider whose authority is `<package>.glance`. */
+    fun hasGlanceProvider(pm: PackageManager, packageName: String): Boolean = try {
+        val info = pm.getPackageInfo(packageName, PackageManager.GET_PROVIDERS)
+        info.providers?.any { it.exported && authorityMatches(it.authority, packageName) } == true
+    } catch (_: Exception) {
+        false
+    }
+
+    internal fun authorityMatches(authority: String?, packageName: String): Boolean =
+        authority?.split(';')?.any { it == "$packageName.glance" } == true
+
     fun uri(packageName: String): Uri = Uri.parse("content://$packageName.glance/lines")
 
     /** Calendar (koyomi), whose own lines take the place of Glance's reading of today. */
@@ -117,19 +151,34 @@ object Glance {
      */
     fun order(context: Context): List<String> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val saved = prefs.getString(KEY_ORDER, null)
+        return combine(
+            prefs.getString(KEY_ORDER, null),
+            prefs.getString(KEY_KEEP, null),
+            discovered(context),
+        )
+    }
+
+    /**
+     * [saved] is the order the person left, [keep] the older "what wins" setting, and [extras]
+     * package names discovered on this phone. A name that is not a known part is dropped. An
+     * extra that was not in the saved order goes at the end, and one the person already moved
+     * stays where they put it.
+     */
+    internal fun combine(saved: String?, keep: String?, extras: List<String>): List<String> {
+        val extra = extras.filter { it.isNotBlank() && it != UNREAD && it !in DEFAULT_ORDER }.distinct()
+        val known = DEFAULT_ORDER + extra
         val start = if (saved != null) {
-            saved.split(',').filter { it in DEFAULT_ORDER }.distinct()
+            saved.split(',').filter { it.isNotBlank() && it in known }.distinct()
         } else {
             // Whoever chose to keep the weather or the counts before there was an order
             // still has them win: they go first.
-            when (prefs.getString(KEY_KEEP, null)) {
+            when (keep) {
                 "WEATHER" -> listOf(SKY) + (DEFAULT_ORDER - SKY)
                 "COUNTS" -> listOf(UNREAD) + (DEFAULT_ORDER - UNREAD)
                 else -> DEFAULT_ORDER
             }
         }
-        return start + DEFAULT_ORDER.filter { it !in start }
+        return start + known.filter { it !in start }
     }
 
     private const val KEY_TEXT_SIZE = "text_size"
@@ -164,9 +213,10 @@ object Glance {
      */
     fun readAll(context: Context): List<Section> {
         val calendarInstalled = context.packageManager.getLaunchIntentForPackage(CALENDAR) != null
+        val optional = OPT_IN + discovered(context)
         return order(context).flatMap { if (it == UNREAD) COUNTS else listOf(it) }.mapNotNull { pkg ->
             when {
-                pkg in OPT_IN && !switchedOn(context, pkg) -> null
+                pkg in optional && !switchedOn(context, pkg) -> null
                 pkg == CALENDAR && !calendarInstalled -> Today.read(context)?.copy(key = CALENDAR)
                 else -> read(context, pkg)
             }

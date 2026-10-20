@@ -19,6 +19,7 @@
     <string name="source_calendar">Calendar: today\'s events</string>
     <string name="source_medicine">Medicine: the next dose</string>
     <string name="source_sky">Sky: the weather</string>
+    <string name="source_almanac">Almanac</string>
     <string name="source_notes">Notes: pinned notes</string>
     <string name="source_wallet">Wallet: today\'s tickets</string>
     <string name="source_music">Music Box: what is playing</string>
@@ -37,6 +38,29 @@
     <string name="today_note_none">Needs calendar access to read the phone\'s calendars. Press to allow it.</string>
     <string name="preview">Preview</string>
     <string name="preview_note">What the lock screen would show now</string>
+    <string name="clock_title">Time and date</string>
+    <string name="clock_note">The phone\'s own, until a size is chosen</string>
+    <string name="clock_system">The phone\'s own</string>
+    <string name="clock_small">Small</string>
+    <string name="clock_medium">Medium</string>
+    <string name="clock_large">Large</string>
+    <string name="clock_larger">Larger</string>
+    <string name="clock_page_note">The phone\'s own clock stays until a size is chosen. Preview shows that size, and how many lines are left under it.</string>
+    <string name="utilities_heading">Utilities</string>
+    <string name="utilities_title">On the lock screen</string>
+    <string name="utilities_note">A row of icons under the clock, or under the music controls when they are up.</string>
+    <string name="moon_title">Moon</string>
+    <string name="moon_note">Almanac\'s phase, when Almanac is showing it.</string>
+    <string name="hotspot_title">Hotspot</string>
+    <string name="hotspot_note">Turns the internet hotspot on and off without unlocking. Android may refuse it.</string>
+    <string name="hotspot_switch">The hotspot</string>
+    <string name="hotspot_on">On. Press to turn it off.</string>
+    <string name="hotspot_off">Off. Press to turn it on.</string>
+    <string name="panel_hotspot">Hotspot</string>
+    <string name="camera_title">Camera</string>
+    <string name="camera_note">Unlocks and opens the camera. A swipe lock opens it at once; a PIN asks first.</string>
+    <string name="panel_camera">Camera</string>
+    <string name="discovered_note">Off until it is on here. The app can turn its own lines off.</string>
     <string name="preview_empty">Nothing to show now. The panel stays off the lock screen until there is.</string>
     <string name="preview_off">The panel is off, so the lock screen shows none of this until it is turned on in Accessibility.</string>
     <!-- Today\'s events, read by Glance itself -->
@@ -52,7 +76,7 @@
     <string name="order_title">Order</string>
     <string name="order_note">The top ones are shown when there is not room for all</string>
     <string name="order_page_note">When there is not room on the lock screen for all of them, the ones at the top are shown.</string>
-    <string name="own_settings_note">Calendar, Sky, Messaging and Email are switched on or off in their own settings.</string>
+    <string name="own_settings_note">Calendar, Sky, Almanac, Messaging and Email are switched on or off in their own settings.</string>
     <string name="not_installed">Not installed: %1$s</string>
     <string name="access_title">Notification access</string>
     <string name="access_on_short">On: other apps\' notifications are counted.</string>
@@ -90,13 +114,13 @@
 
     <!-- The accessibility service, as Android's Accessibility settings show it -->
     <string name="service_label">Glance on the lock screen</string>
-    <string name="service_description">Shows today\'s events, the weather and what is unread on the lock screen, from Calendar, Sky, Messaging and Email, and how many notifications the apps you choose have waiting. Without Calendar, it can read today\'s events itself if you turn that on. It reads the lock screen only to see where its own items end and whether the PIN pad is up, and it has no network access.</string>
+    <string name="service_description">Shows today\'s events, the weather and what is unread on the lock screen, from Calendar, Sky, Messaging and Email, and how many notifications the apps you choose have waiting. Without Calendar, it can read today\'s events itself if you turn that on. The utilities row, if you turn it on, can show Almanac\'s moon, ask the phone to start or stop the hotspot, and open the camera. Power pressed twice, if you turn it on, switches the torch. It reads the lock screen only to see where its own items and the music controls are, and whether the PIN pad is up. It has no network access of its own.</string>
     <!-- Android's notification access list -->
     <string name="listener_label">Glance: count notifications</string>
 
     <!-- About dialog. Keep the names of the app, people, projects and licences as they are -->
     <string name="about_title">Glance %1$s</string>
-    <string name="about_privacy">It shows what Calendar, Sky, Messaging and Email hand it, and only when their own settings allow. With notification access on, it counts the notifications of the apps you choose, and reads what they say only if you turn that on. Without Calendar, it reads today\'s events from Mudita\'s Calendar and, with calendar access, the phone\'s other calendars, only if you turn that on. It has no network access.</string>
+    <string name="about_privacy">It shows what Calendar, Sky, Messaging and Email hand it, and only when their own settings allow. Other apps that hand it lines stay off until switched on here. With notification access on, it counts the notifications of the apps you choose, and reads what they say only if you turn that on. Without Calendar, it reads today\'s events from Mudita\'s Calendar and, with calendar access, the phone\'s other calendars, only if you turn that on. The hotspot button asks the phone to start or stop sharing; Glance does not use the network itself.</string>
     <string name="about_after">The lock-screen overlay follows Katapult by gezimos, GPL 3.0.</string>
     <!-- The name of the app's licence -->
     <string name="about_licence">GNU General Public License v3</string>

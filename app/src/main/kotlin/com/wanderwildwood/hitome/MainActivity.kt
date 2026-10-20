@@ -1,7 +1,9 @@
 package com.wanderwildwood.hitome
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -50,11 +52,14 @@ import com.wanderwildwood.hitome.ui.RestrictedHint
 import com.wanderwildwood.hitome.ui.RestrictedSettings
 import com.wanderwildwood.hitome.ui.AboutDialog
 import com.wanderwildwood.hitome.ui.BarButton
+import com.wanderwildwood.hitome.ui.ClockCover
 import com.wanderwildwood.hitome.ui.GlancePanel
+import com.wanderwildwood.hitome.ui.UtilityIcons
 import com.wanderwildwood.hitome.ui.Icons
 import com.wanderwildwood.hitome.ui.monochrome
 import com.wanderwildwood.hitome.ui.PANEL_WIDTH_DP
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
@@ -75,6 +80,7 @@ private fun MainScreen() {
     var aboutOpen by remember { mutableStateOf(false) }
     var choosing by remember { mutableStateOf(false) }
     var previewing by remember { mutableStateOf(false) }
+    var sizing by remember { mutableStateOf(false) }
     // Re-read on every return, which is usually from the accessibility settings.
     var checks by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
@@ -84,6 +90,13 @@ private fun MainScreen() {
     val serviceOn = remember(checks) { serviceEnabled(context) }
     val installed = remember(checks) {
         Glance.SOURCES.associateWith { context.packageManager.getLaunchIntentForPackage(it) != null }
+    }
+    val discovered = remember(checks) { Glance.discovered(context) }
+    val discoveredLabels = remember(discovered) {
+        val pm = context.packageManager
+        discovered.associateWith { pkg ->
+            try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { pkg }
+        }
     }
     val access = remember(checks) { Notices.accessGranted(context) }
     // Asked for and still off on the way back: on Android 13+ that is restricted settings.
@@ -99,7 +112,18 @@ private fun MainScreen() {
     val hasTorch = remember { Torch.available(context) }
 
     var todayOn by remember { mutableStateOf(Today.enabled(context)) }
-    var switchedOn by remember { mutableStateOf(Glance.OPT_IN.filter { Glance.switchedOn(context, it) }.toSet()) }
+    var switchedOn by remember(checks) {
+        mutableStateOf((Glance.OPT_IN + discovered).filter { Glance.switchedOn(context, it) }.toSet())
+    }
+    var clockSize by remember(checks) { mutableStateOf(Clock.size(context)) }
+    var utilitiesOn by remember(checks) { mutableStateOf(Utilities.master(context)) }
+    var moonOn by remember(checks) { mutableStateOf(Utilities.moon(context)) }
+    var hotspotOn by remember(checks) { mutableStateOf(Hotspot.enabled(context)) }
+    var cameraOn by remember(checks) { mutableStateOf(Camera.enabled(context)) }
+    val sharing by Hotspot.on.collectAsState()
+    LaunchedEffect(hotspotOn) {
+        if (hotspotOn) Hotspot.attach(context)
+    }
     val calendarAccess = remember(checks) { Today.canReadCalendars(context) }
     val muditaCalendar = remember(checks) { Today.muditaCalendarInstalled(context) }
     val askCalendar = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -114,19 +138,29 @@ private fun MainScreen() {
         }
     }
 
-    var order by remember { mutableStateOf(Glance.order(context)) }
+    var order by remember(checks) { mutableStateOf(Glance.order(context)) }
+    fun titleOf(key: String): String = when {
+        key == Glance.UNREAD -> context.getString(R.string.unread_title)
+        key in SOURCES -> context.getString(SOURCES.getValue(key))
+        else -> discoveredLabels[key] ?: key
+    }
     var ordering by remember { mutableStateOf(false) }
 
     // A newer source without its app is not listed, and is stepped over when moving.
     fun listed(key: String) = key !in Glance.OPT_IN || installed[key] == true
 
     @Composable
-    fun SourceRow(pkg: String, label: Int) {
+    fun SourceRow(pkg: String, title: String) {
         val here = installed[pkg] == true
-        // The newer sources: not listed without their app, and off until switched on here.
-        if (pkg in Glance.OPT_IN) {
+        // Off until switched on here: the emergency card, the dose, tickets, and any app found
+        // by its provider. Nothing new appears just because an app was installed.
+        if (pkg in Glance.OPT_IN || pkg in discovered) {
             val on = pkg in switchedOn
-            SwitchRow(title = stringResource(label), note = null, checked = on) {
+            SwitchRow(
+                title = title,
+                note = if (pkg in discovered) stringResource(R.string.discovered_note) else null,
+                checked = on,
+            ) {
                 Glance.setSwitchedOn(context, pkg, !on)
                 switchedOn = if (on) switchedOn - pkg else switchedOn + pkg
             }
@@ -161,7 +195,7 @@ private fun MainScreen() {
         // Not installed, these are named once together, below the list.
         if (!here) return
         // Switched on or off in the app itself, so the row is a door to it.
-        Row(title = stringResource(label), value = null, chevron = true) {
+        Row(title = title, value = null, chevron = true) {
             context.packageManager.getLaunchIntentForPackage(pkg)?.let { context.startActivity(it) }
         }
     }
@@ -175,10 +209,21 @@ private fun MainScreen() {
         PreviewScreen(serviceOn) { previewing = false }
         return
     }
+    // Clock sizes stay in the tree. They are not offered until Clock.OFFERED is turned back on.
+    // Look at that again before a release: the cover sat on the music controls.
+    if (Clock.OFFERED && sizing) {
+        BackHandler { sizing = false }
+        ClockScreen(clockSize, { size ->
+            clockSize = size
+            Clock.setSize(context, size)
+        }) { sizing = false }
+        return
+    }
     if (ordering) {
         BackHandler { ordering = false }
         OrderScreen(
             keys = order.filter { listed(it) },
+            title = ::titleOf,
             onMove = { key, by ->
                 val shown = order.filter { listed(it) }
                 val next = shown.getOrNull(shown.indexOf(key) + by)
@@ -234,6 +279,68 @@ private fun MainScreen() {
             item {
                 Row(title = stringResource(R.string.text_size), value = stringResource(TEXT_SIZE_NAMES[textSize])) { pickingSize = true }
             }
+            if (Clock.OFFERED) {
+                item {
+                    Row(
+                        title = stringResource(R.string.clock_title),
+                        value = stringResource(clockLabel(clockSize)),
+                        chevron = true,
+                    ) { sizing = true }
+                }
+            }
+            item { Heading(stringResource(R.string.utilities_heading)) }
+            item {
+                SwitchRow(
+                    title = stringResource(R.string.utilities_title),
+                    note = stringResource(R.string.utilities_note),
+                    checked = utilitiesOn,
+                ) {
+                    utilitiesOn = !utilitiesOn
+                    Utilities.setMaster(context, utilitiesOn)
+                }
+            }
+            if (utilitiesOn) {
+                item {
+                    SwitchRow(
+                        title = stringResource(R.string.moon_title),
+                        note = stringResource(R.string.moon_note),
+                        checked = moonOn,
+                    ) {
+                        moonOn = !moonOn
+                        Utilities.setMoon(context, moonOn)
+                    }
+                }
+                item {
+                    SwitchRow(
+                        title = stringResource(R.string.hotspot_title),
+                        note = stringResource(R.string.hotspot_note),
+                        checked = hotspotOn,
+                    ) {
+                        hotspotOn = !hotspotOn
+                        Hotspot.setEnabled(context, hotspotOn)
+                        if (hotspotOn) Hotspot.attach(context)
+                    }
+                }
+                if (hotspotOn) {
+                    item {
+                        Row(
+                            title = stringResource(R.string.hotspot_switch),
+                            value = stringResource(if (sharing) R.string.hotspot_on else R.string.hotspot_off),
+                            chevron = false,
+                        ) { Hotspot.toggle(context) }
+                    }
+                }
+                item {
+                    SwitchRow(
+                        title = stringResource(R.string.camera_title),
+                        note = stringResource(R.string.camera_note),
+                        checked = cameraOn,
+                    ) {
+                        cameraOn = !cameraOn
+                        Camera.setEnabled(context, cameraOn)
+                    }
+                }
+            }
 
             // Each heading is drawn in the item of the row under it, so a page never ends on a
             // heading alone.
@@ -241,9 +348,9 @@ private fun MainScreen() {
                 item(key = key) {
                     if (i == 0) Heading(stringResource(R.string.sources_heading))
                     if (key == Glance.UNREAD) {
-                        UNREAD_SOURCES.forEach { (pkg, label) -> SourceRow(pkg, label) }
+                        UNREAD_SOURCES.forEach { (pkg, label) -> SourceRow(pkg, context.getString(label)) }
                     } else {
-                        SourceRow(key, SOURCES.getValue(key))
+                        SourceRow(key, titleOf(key))
                     }
                 }
             }
@@ -379,7 +486,12 @@ private fun Heading(text: String) {
  * When there is not room on the lock screen for all of them, the ones at the top are shown.
  */
 @Composable
-private fun OrderScreen(keys: List<String>, onMove: (String, Int) -> Unit, onBack: () -> Unit) {
+private fun OrderScreen(
+    keys: List<String>,
+    title: (String) -> String,
+    onMove: (String, Int) -> Unit,
+    onBack: () -> Unit,
+) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
@@ -404,7 +516,7 @@ private fun OrderScreen(keys: List<String>, onMove: (String, Int) -> Unit, onBac
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         TextMMD(
-                            text = stringResource(if (key == Glance.UNREAD) R.string.unread_title else SOURCES.getValue(key)),
+                            text = title(key),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
@@ -438,16 +550,77 @@ private fun Row(title: String, value: String?, chevron: Boolean = false, onClick
     }
 }
 
+/** The sizes for the time and date. The chosen one is drawn in bold. */
+@Composable
+private fun ClockScreen(selected: Clock.Size, onSelect: (Clock.Size) -> Unit, onBack: () -> Unit) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
+        topBar = {
+            TopAppBarMMD(
+                title = { TextMMD(text = stringResource(R.string.clock_title)) },
+                navigationIcon = { BarButton(Icons.Back, stringResource(R.string.cd_back), onBack) },
+            )
+        },
+    ) { padding ->
+        PagedColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
+            item {
+                TextMMD(
+                    text = stringResource(R.string.clock_page_note),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                )
+            }
+            Clock.Size.entries.forEach { size ->
+                item(key = size.name) {
+                    androidx.compose.foundation.layout.Row(
+                        Modifier.fillMaxWidth().clickable { onSelect(size) }.padding(vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextMMD(
+                            text = stringResource(clockLabel(size)),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (size == selected) FontWeight.Bold else null,
+                        )
+                    }
+                    HorizontalDividerMMD()
+                }
+            }
+            item { Spacer(Modifier.height(24.dp)) }
+        }
+    }
+}
+
+private fun clockLabel(size: Clock.Size): Int = when (size) {
+    Clock.Size.SYSTEM -> R.string.clock_system
+    Clock.Size.SMALL -> R.string.clock_small
+    Clock.Size.MEDIUM -> R.string.clock_medium
+    Clock.Size.LARGE -> R.string.clock_large
+    Clock.Size.LARGER -> R.string.clock_larger
+}
+
 /**
  * The panel as the lock screen would draw it now, from the same lines, so what each switch
- * does can be seen without locking the phone. Pressing it does nothing here.
+ * does can be seen without locking the phone. Pressing a line does nothing here. Pressing
+ * the hotspot turns it over, the same as on the lock screen.
  */
 @Composable
 private fun PreviewScreen(serviceOn: Boolean, onBack: () -> Unit) {
     val context = LocalContext.current
     var sections by remember { mutableStateOf<List<Glance.Section>?>(null) }
+    var phase by remember { mutableStateOf<Moon.Phase?>(null) }
     val notices by Notices.now.collectAsState()
-    LaunchedEffect(Unit) { sections = withContext(Dispatchers.IO) { Glance.readAll(context) } }
+    val sharing by Hotspot.on.collectAsState()
+    LaunchedEffect(Unit) {
+        if (Hotspot.enabled(context)) Hotspot.attach(context)
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val read = withContext(Dispatchers.IO) { Glance.readAll(context) to Moon.read(context) }
+            sections = read.first
+            phase = read.second
+            delay((60_000L - System.currentTimeMillis() % 60_000L).coerceAtLeast(1_000L))
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -461,9 +634,27 @@ private fun PreviewScreen(serviceOn: Boolean, onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
             Spacer(Modifier.height(24.dp))
             val shown = sections ?: return@Column
-            if (shown.isEmpty() && notices.isEmpty()) {
+            val size = Clock.size(context)
+            val rowOn = Utilities.master(context)
+            val moon = rowOn && Utilities.moon(context)
+            val hotspot = rowOn && Hotspot.enabled(context)
+            val camera = if (rowOn && Camera.enabled(context)) Camera.app(context) else null
+            val icons = UtilityIcons(
+                phase = if (moon) phase else null,
+                hotspotOn = if (hotspot) sharing else null,
+                onHotspot = { Hotspot.toggle(context) },
+                onCamera = camera?.let { pkg ->
+                    {
+                        context.packageManager.getLaunchIntentForPackage(pkg)?.let {
+                            try { context.startActivity(it) } catch (_: Exception) {}
+                        }
+                    }
+                },
+            )
+            if (shown.isEmpty() && notices.isEmpty() && size == Clock.Size.SYSTEM && !icons.shown) {
                 TextMMD(text = stringResource(R.string.preview_empty), style = MaterialTheme.typography.bodyMedium)
             } else {
+                if (size != Clock.Size.SYSTEM) ClockCover(size, Clock.heightDp(size), phase)
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                     val scale = Glance.textScale(context)
                     Box(Modifier.width((PANEL_WIDTH_DP * scale).dp)) {
@@ -471,9 +662,10 @@ private fun PreviewScreen(serviceOn: Boolean, onBack: () -> Unit) {
                             sections = shown,
                             notices = notices,
                             order = Glance.order(context),
-                            roomDp = (PREVIEW_ROOM_DP / scale).toInt(),
+                            roomDp = (Clock.previewRoom(size, PREVIEW_ROOM_DP) / scale).toInt(),
                             onOpen = {},
                             scale = scale,
+                            utilities = icons,
                         )
                     }
                 }
@@ -506,7 +698,11 @@ private fun ChooseAppsScreen(onBack: () -> Unit) {
         pm.queryIntentActivities(launcher, 0)
             .map { it.activityInfo.applicationInfo }
             .distinctBy { it.packageName }
-            .filter { it.packageName != context.packageName && it.packageName !in Glance.SOURCES }
+            .filter { pkg ->
+                pkg.packageName != context.packageName &&
+                    pkg.packageName !in Glance.SOURCES &&
+                    !Glance.hasGlanceProvider(pm, pkg.packageName)
+            }
             .map { it.packageName to pm.getApplicationLabel(it).toString() }
             .sortedBy { it.second.lowercase() }
     }
@@ -572,6 +768,7 @@ private val SOURCES = mapOf(
     "com.wanderwildwood.koyomi" to R.string.source_calendar,
     "com.wanderwildwood.fukuyaku" to R.string.source_medicine,
     "com.wanderwildwood.soramoyo" to R.string.source_sky,
+    "com.heavencanthandle.almanac" to R.string.source_almanac,
     "com.wanderwildwood.oboegaki" to R.string.source_notes,
     "com.wanderwildwood.satsuire" to R.string.source_wallet,
     "com.wanderwildwood.jimeikin" to R.string.source_music,

@@ -6,9 +6,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -16,8 +19,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -29,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.mudita.mmd.ThemeMMD
 import com.mudita.mmd.components.text.TextMMD
 import com.wanderwildwood.hitome.Glance
+import com.wanderwildwood.hitome.Moon
 import com.wanderwildwood.hitome.Notices
 import com.wanderwildwood.hitome.R
 
@@ -40,6 +47,8 @@ internal const val RULE_DP = 13
 internal const val PAD_DP = 4
 /** The panel's width, the lock screen's own dotted rules. */
 internal const val PANEL_WIDTH_DP = 240
+/** The utilities row. Kept even when lines are cut. */
+internal const val UTIL_DP = 48
 
 /**
  * The parts in the person's [order], each under a dotted rule like the lock screen's own: the
@@ -58,6 +67,7 @@ fun GlancePanel(
     roomDp: Int,
     onOpen: (String) -> Unit,
     scale: Float = 1f,
+    utilities: UtilityIcons = UtilityIcons(),
 ) {
     // A larger text size draws the whole panel larger, type, rules and spacing together, so it
     // is laid out exactly as at Normal: [roomDp] and every height here are in the panel's own
@@ -65,11 +75,13 @@ fun GlancePanel(
     val outer = LocalDensity.current
     CompositionLocalProvider(LocalDensity provides Density(outer.density * scale, outer.fontScale)) {
         ThemeMMD(colorScheme = monochrome) {
+            // The icon row is kept even when the lines are cut, so the room they share is what is left.
+            val lineRoom = if (utilities.shown) (roomDp - UTIL_DP).coerceAtLeast(0) else roomDp
             // With the words shown, each app has a line of its own; without, the names share lines.
             val withText = notices.any { it.text != null }
             // Without words, Messaging's and Email's entries have nothing to add to their counts.
             val allNotices = if (withText) notices else notices.filter { it.counted }
-            val kept = chosen(sections, allNotices, order, roomDp)
+            val kept = chosen(sections, allNotices, order, lineRoom)
             val keptSections = sections.filter { it.key in kept }
             @Suppress("NAME_SHADOWING")
             val notices = if (Glance.UNREAD in kept) allNotices else emptyList()
@@ -79,8 +91,9 @@ fun GlancePanel(
             val noticeLines = noticeRows.size + textLines.size
             val footDp = if (counts.isEmpty() && noticeLines == 0) 0
                 else RULE_DP + PAD_DP + (if (counts.isNotEmpty()) LINE_DP else 0) + noticeLines * LINE_DP
-            val fitted = fit(keptSections.filter { it.key != Glance.UNREAD }, footDp, roomDp)
+            val fitted = fit(keptSections.filter { it.key != Glance.UNREAD }, footDp, lineRoom)
             Column(Modifier.fillMaxWidth().background(Color.White)) {
+                if (utilities.shown) UtilityRow(utilities)
                 order.forEach { key ->
                     if (key == Glance.UNREAD) {
                         if (counts.isNotEmpty() || noticeLines > 0) Foot(counts, textLines, noticeRows, onOpen)
@@ -101,9 +114,103 @@ fun GlancePanel(
                         }
                     }
                 }
-                if (fitted.isNotEmpty() || counts.isNotEmpty() || noticeLines > 0) Rule()
+                if (utilities.shown || fitted.isNotEmpty() || counts.isNotEmpty() || noticeLines > 0) Rule()
             }
         }
+    }
+}
+
+/**
+ * The moon, the hotspot, and the camera, as icons on one line. A null hotspot or camera is left
+ * off the row. A null phase draws no moon. Pressing the hotspot does not unlock; pressing the
+ * camera unlocks and opens it.
+ */
+data class UtilityIcons(
+    val phase: Moon.Phase? = null,
+    val hotspotOn: Boolean? = null,
+    val onHotspot: () -> Unit = {},
+    val onCamera: (() -> Unit)? = null,
+) {
+    val shown: Boolean get() = phase != null || hotspotOn != null || onCamera != null
+}
+
+@Composable
+private fun UtilityRow(icons: UtilityIcons) {
+    Row(
+        Modifier.fillMaxWidth().height(UTIL_DP.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icons.phase != null) {
+            MoonGlyph(icons.phase, Modifier.size(28.dp))
+        }
+        if (icons.hotspotOn != null) {
+            UtilityButton(stringResource(R.string.panel_hotspot), icons.onHotspot) {
+                HotspotIcon(icons.hotspotOn)
+            }
+        }
+        if (icons.onCamera != null) {
+            UtilityButton(stringResource(R.string.panel_camera), icons.onCamera) {
+                CameraIcon()
+            }
+        }
+    }
+}
+
+@Composable
+private fun UtilityButton(description: String, onClick: () -> Unit, icon: @Composable () -> Unit) {
+    Box(
+        Modifier.size(44.dp).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { icon() }
+}
+
+/** The hotspot. A dot and two arcs, filled in when it is sharing. */
+@Composable
+private fun HotspotIcon(on: Boolean) {
+    Canvas(Modifier.size(28.dp)) {
+        val ink = Color.Black
+        if (on) drawCircle(ink, radius = size.minDimension * 0.48f)
+        val mark = if (on) Color.White else ink
+        val c = Offset(size.width / 2f, size.height * 0.62f)
+        drawCircle(mark, radius = size.minDimension * 0.07f, center = c)
+        val stroke = Stroke(width = size.minDimension * 0.06f)
+        listOf(0.22f, 0.38f).forEach { scale ->
+            val d = size.minDimension * scale
+            drawArc(
+                color = mark,
+                startAngle = 220f,
+                sweepAngle = 100f,
+                useCenter = false,
+                topLeft = Offset(c.x - d, c.y - d),
+                size = Size(d * 2f, d * 2f),
+                style = stroke,
+            )
+        }
+    }
+}
+
+/** A camera: a body with a hump for the viewfinder, and a ring for the lens. */
+@Composable
+private fun CameraIcon() {
+    Canvas(Modifier.size(28.dp)) {
+        val ink = Color.Black
+        val w = size.width
+        val h = size.height
+        val stroke = Stroke(width = w * 0.07f)
+        val body = Path().apply {
+            moveTo(w * 0.08f, h * 0.30f)
+            lineTo(w * 0.32f, h * 0.30f)
+            lineTo(w * 0.38f, h * 0.20f)
+            lineTo(w * 0.62f, h * 0.20f)
+            lineTo(w * 0.68f, h * 0.30f)
+            lineTo(w * 0.92f, h * 0.30f)
+            lineTo(w * 0.92f, h * 0.80f)
+            lineTo(w * 0.08f, h * 0.80f)
+            close()
+        }
+        drawPath(body, ink, style = stroke)
+        drawCircle(ink, radius = w * 0.15f, center = Offset(w * 0.5f, h * 0.55f), style = stroke)
     }
 }
 
@@ -333,12 +440,24 @@ private fun parts(
 }
 
 /** The least height, in dp, the whole panel can be drawn in. See [parts]. */
-internal fun leastDp(sections: List<Glance.Section>, notices: List<Notices.Notice>, order: List<String>): Int =
-    parts(sections, notices, order).sumOf { it.second } + RULE_DP
+internal fun leastDp(
+    sections: List<Glance.Section>,
+    notices: List<Notices.Notice>,
+    order: List<String>,
+    utilities: Boolean = false,
+): Int = parts(sections, notices, order).sumOf { it.second } + RULE_DP + if (utilities) UTIL_DP else 0
 
 /** The least height of the first part in [order] that has something to show; 0 for none. */
-internal fun firstDp(sections: List<Glance.Section>, notices: List<Notices.Notice>, order: List<String>): Int =
-    parts(sections, notices, order).firstOrNull()?.let { it.second + RULE_DP } ?: 0
+internal fun firstDp(
+    sections: List<Glance.Section>,
+    notices: List<Notices.Notice>,
+    order: List<String>,
+    utilities: Boolean = false,
+): Int {
+    val lines = parts(sections, notices, order).firstOrNull()?.let { it.second + RULE_DP } ?: 0
+    if (!utilities) return lines
+    return UTIL_DP + if (lines > 0) lines else RULE_DP
+}
 
 /**
  * The parts drawn in [roomDp]: the first in [order] always, then each after it that still fits,

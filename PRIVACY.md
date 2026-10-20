@@ -44,6 +44,22 @@ today's events itself, if you turn that on. It has no network access and sends n
 - **The torch, only if you turn on Power pressed twice.** Glance notes when the screen goes on
   and off, keeps nothing of it, and switches the torch. It does not open the camera. The code is
   `app/src/main/kotlin/com/wanderwildwood/hitome/Torch.kt`.
+- **Other apps' lines, once you switch them on.** Any installed app with a provider at
+  `<package>.glance` is listed under **On the lock screen**, off until you turn it on. Until
+  then Glance does not ask it for lines.
+- **The moon, from Almanac.** When the utilities row is on, Moon is on, and Almanac's own
+  lock-screen switch is on, Glance reads one row at
+  `content://com.heavencanthandle.almanac.glance/moon`: how far the phase has turned, how full
+  the moon is, and whether it is waxing. The name in that row is not used. Nothing is drawn
+  when the row is empty. Almanac's text lines stay in the panel. The code is
+  `app/src/main/kotlin/com/wanderwildwood/hitome/Moon.kt`.
+- **The hotspot, only if you turn that icon on.** Pressing it asks Android to start or stop
+  the phone's internet hotspot. Glance does not join the network and does not see the traffic.
+  Android keeps that switch for system apps, so the phone may refuse it. The code is
+  `app/src/main/kotlin/com/wanderwildwood/hitome/Hotspot.kt`.
+- **The camera, only if you turn that icon on.** Pressing it unlocks the phone and opens
+  the phone's own camera app, the same as pressing an app's lines. Glance does not use the
+  camera itself. The code is `app/src/main/kotlin/com/wanderwildwood/hitome/Camera.kt`.
 
 ## What anyone can see
 
@@ -55,8 +71,9 @@ asks for the phone's lock before opening anything, so a PIN still protects what 
 
 ## What it stores
 
-The list of apps you chose, whether to show what they say, and whether to read today's events,
-and nothing else: no history and no copy of what it shows.
+The list of apps you chose, whether to show what they say, whether to read today's events,
+which apps' lines you switched on, whether the utilities row is on, whether the moon, the hotspot
+and the camera are on, and whether Power pressed twice is on, and nothing else: no history and no copy of what it shows.
 
 ## Checking for yourself
 
@@ -64,10 +81,14 @@ and nothing else: no history and no copy of what it shows.
 aapt2 dump badging hitome.apk | grep uses-permission
 ```
 
-prints two lines. `android.permission.READ_CALENDAR` is calendar access, asked for only when you
-turn on **Today's events** on a phone without Calendar, and never otherwise.
-`com.wanderwildwood.hitome.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` is not a permission over
-anything on the phone: AndroidX declares it inside every app built against it, so that the app's
-own internal broadcasts cannot be sent by anyone else, and it names Glance itself. Notification
-access is not a permission an app asks for; it is a switch in Android's settings that you turn on
-or leave off.
+prints the lines you asked for, plus one AndroidX adds. `android.permission.READ_CALENDAR`
+is calendar access, asked for only when you turn on **Today's events** on a phone without
+Calendar, and never otherwise. `android.permission.ACCESS_NOTIFICATION_POLICY` is what lets
+**Ring for calls only** add its Do Not Disturb rule, and it is not used unless that is on.
+`android.permission.TETHER_PRIVILEGED` is the hotspot button. Android does
+not grant it to an ordinary app, and Glance does not use the network either way.
+`com.wanderwildwood.hitome.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` is not a
+permission over anything on the phone: AndroidX declares it inside every app built against it,
+so that the app's own internal broadcasts cannot be sent by anyone else, and it names Glance
+itself. Notification access is not a permission an app asks for; it is a switch in Android's
+settings that you turn on or leave off.
