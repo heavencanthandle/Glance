@@ -44,7 +44,8 @@ change it:
 - **What is playing**, from [Music Box](https://github.com/wanderwildwood/jimeikin) and
   [Audio Reading](https://github.com/wanderwildwood/mimidoku): the song and who sings it, or the
   book and its chapter (or the time left in a book with no chapters), and whether it is paused.
-  Nothing once playback stops.
+  Nothing once playback stops, and nothing while that app's own lock-screen controls are on,
+  since they already say it.
 - **The bitcoin price**, from [Bitcoin](https://github.com/wanderwildwood/zeni), off until
   switched on in both Bitcoin's App Settings and Glance: the price and how it moved in a day.
   Never a balance.
@@ -178,6 +179,14 @@ Any app can take part: a read-only provider at `<package>.glance/lines` with the
 apps share is `glance/GlanceProvider.kt` in any of them. Glance lists every installed app that
 has one, under **On the lock screen**, off until it is switched on here. The app's own switch
 still decides whether the lines exist.
+
+## On the home screen
+
+Glance can hand the panel's lines to inkOS:wndr, to draw on its home screen under the apps: the
+same apps, in the order and with the switches chosen here, and for each one whether it shows and
+why (on, off in the app, off in Glance, not installed, needs an update, did not answer). Other
+apps' notifications are never part of it. It answers only inkOS:wndr, checked by its package name
+and the certificate its releases are signed with; any other app that asks gets nothing.
 
 ## Credit
 

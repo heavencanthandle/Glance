@@ -1,9 +1,12 @@
 package com.wanderwildwood.hitome
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.database.Cursor
 import android.net.Uri
+import android.provider.Settings
 
 /**
  * What an app has to say on the lock screen, asked of the app itself.
@@ -84,6 +87,20 @@ object Glance {
         val now = prefs.getStringSet(KEY_ON, emptySet())!!.toMutableSet()
         if (on) now += packageName else now -= packageName
         prefs.edit().putStringSet(KEY_ON, now).apply()
+        PanelForHome.changed(context)
+    }
+
+    /** The apps that say what is playing, each of which can draw its own controls on the lock screen. */
+    val PLAYERS = setOf("com.wanderwildwood.jimeikin", "com.wanderwildwood.mimidoku")
+
+    /**
+     * Whether [packageName] has its own lock-screen controls switched on, an accessibility service
+     * of its own. They already name what is playing, so the panel leaves that line out.
+     */
+    fun ownControlsOn(context: Context, packageName: String): Boolean {
+        val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+            ?: return false
+        return enabled.split(':').any { ComponentName.unflattenFromString(it)?.packageName == packageName }
     }
 
     /**
@@ -199,6 +216,7 @@ object Glance {
     fun setOrder(context: Context, order: List<String>) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_ORDER, order.joinToString(",")).apply()
+        PanelForHome.changed(context)
     }
 
     /** [order] with the part at [from] moved to [to]. */
@@ -212,42 +230,52 @@ object Glance {
      * events are Calendar's own while it is installed, and otherwise Glance's reading ([Today]).
      */
     fun readAll(context: Context): List<Section> {
-        val calendarInstalled = context.packageManager.getLaunchIntentForPackage(CALENDAR) != null
+        val calendarInstalled = calendarInstalled(context)
         val optional = OPT_IN + discovered(context)
-        return order(context).flatMap { if (it == UNREAD) COUNTS else listOf(it) }.mapNotNull { pkg ->
+        return sources(order(context)).mapNotNull { pkg ->
             when {
                 pkg in optional && !switchedOn(context, pkg) -> null
+                pkg in PLAYERS && ownControlsOn(context, pkg) -> null
                 pkg == CALENDAR && !calendarInstalled -> Today.read(context)?.copy(key = CALENDAR)
                 else -> read(context, pkg)
             }
         }
     }
 
+    /** The sources one by one in [order], the counts' place standing for both of them. */
+    fun sources(order: List<String>): List<String> = order.flatMap { if (it == UNREAD) COUNTS else listOf(it) }
+
+    fun calendarInstalled(context: Context): Boolean =
+        context.packageManager.getLaunchIntentForPackage(CALENDAR) != null
+
     /** Null when the app is not installed, has nothing to say, or has its switch off. */
     fun read(context: Context, packageName: String): Section? = try {
-        context.contentResolver.query(uri(packageName), COLUMNS, null, null, null)?.use { c ->
-            val heading = c.getColumnIndex("heading")
-            val lead = c.getColumnIndex("lead")
-            val text = c.getColumnIndex("text")
-            val bold = c.getColumnIndex("bold")
-            if (text < 0) return null
-            var title: String? = null
-            val lines = mutableListOf<Line>()
-            while (c.moveToNext()) {
-                if (title == null && heading >= 0) title = c.getString(heading)?.takeIf { it.isNotBlank() }
-                val t = c.getString(text)?.takeIf { it.isNotBlank() } ?: continue
-                lines += Line(
-                    lead = if (lead >= 0) c.getString(lead)?.takeIf { it.isNotBlank() } else null,
-                    text = t,
-                    bold = bold >= 0 && c.getInt(bold) == 1,
-                )
-            }
-            if (lines.isEmpty()) null else Section(packageName, title, lines)
-        }
+        context.contentResolver.query(uri(packageName), COLUMNS, null, null, null)?.use { c -> section(c, packageName) }
     } catch (_: Exception) {
         // Not installed, too old to have a provider, or it refused: in every case, nothing.
         null
     }
 
-    private val COLUMNS = arrayOf("heading", "lead", "text", "bold")
+    /** The section an app's answer makes; null when it has no lines, or no `text` column. */
+    fun section(c: Cursor, packageName: String): Section? {
+        val heading = c.getColumnIndex("heading")
+        val lead = c.getColumnIndex("lead")
+        val text = c.getColumnIndex("text")
+        val bold = c.getColumnIndex("bold")
+        if (text < 0) return null
+        var title: String? = null
+        val lines = mutableListOf<Line>()
+        while (c.moveToNext()) {
+            if (title == null && heading >= 0) title = c.getString(heading)?.takeIf { it.isNotBlank() }
+            val t = c.getString(text)?.takeIf { it.isNotBlank() } ?: continue
+            lines += Line(
+                lead = if (lead >= 0) c.getString(lead)?.takeIf { it.isNotBlank() } else null,
+                text = t,
+                bold = bold >= 0 && c.getInt(bold) == 1,
+            )
+        }
+        return if (lines.isEmpty()) null else Section(packageName, title, lines)
+    }
+
+    val COLUMNS = arrayOf("heading", "lead", "text", "bold")
 }
