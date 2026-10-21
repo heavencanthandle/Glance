@@ -104,10 +104,11 @@ class Torch(private val context: Context) {
         private const val KEY_ON = "on"
 
         /**
-         * The longest gap between the two presses, measured as the screen changes. At 450 ms,
-         * locking the phone and waking it again to look lit the torch.
+         * The longest gap between the two presses, measured as the screen changes. At 450 ms, and
+         * still at 300, locking the phone and waking it to look lit the torch; at 100 a quick
+         * double press on the Kompakt (120-170 ms apart) missed.
          */
-        private const val WINDOW_MS = 300L
+        private const val WINDOW_MS = 200L
 
         /** The panel's part for the torch, which is not one of the apps in [Glance.order]. */
         const val PANEL_KEY = "torch"
