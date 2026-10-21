@@ -65,7 +65,13 @@ object Today {
         val events = mudita(context, today) + shared(context, today)
         val allDay = events.filter { it.allDay }.sortedBy { it.title.lowercase() }
         val timed = events.filter { !it.allDay && it.finish.isAfter(now) }.sortedBy { it.start }
-        val time = DateTimeFormatter.ofPattern(if (DateFormat.is24HourFormat(context)) "H:mm" else "h:mm")
+        // The phone's own clock setting, and with the 12-hour clock its AM and PM in the phone's
+        // language: "h:mm" alone left 9:00 in the morning and in the evening the same.
+        val locale = context.resources.configuration.locales[0]
+        val time = DateTimeFormatter.ofPattern(
+            DateFormat.getBestDateTimePattern(locale, if (DateFormat.is24HourFormat(context)) "Hmm" else "hmma"),
+            locale,
+        )
         val lines = allDay.map { Glance.Line(context.getString(R.string.today_all_day), it.title, false) } +
             timed.map {
                 // An event under way since before today says so rather than giving yesterday's time.
