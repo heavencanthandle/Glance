@@ -31,6 +31,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mudita.mmd.ThemeMMD
 import com.mudita.mmd.components.text.TextMMD
@@ -110,7 +111,8 @@ fun GlancePanel(
                                     maxLines = 1,
                                 )
                             }
-                            section.lines.forEach { line -> LineRow(line) }
+                            val leadWidth = leadWidth(section.lines)
+                            section.lines.forEach { line -> LineRow(line, leadWidth) }
                         }
                     }
                 }
@@ -280,8 +282,28 @@ private fun Foot(
     }
 }
 
+/**
+ * The lead column, as wide as the widest lead in the section and never narrower than 64 dp, so
+ * a section's texts start in one line down the panel. "12:30 PM" and "until 12:30 PM" did not
+ * fit the old fixed 64. Measured in the bold it is drawn in; a lead that would take more than
+ * half the panel is cut instead of pushing its text off the edge.
+ */
 @Composable
-private fun LineRow(line: Glance.Line) {
+private fun leadWidth(lines: List<Glance.Line>): Dp {
+    val leads = lines.mapNotNull { it.lead }
+    if (leads.isEmpty()) return MIN_LEAD
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold)
+    val widest = leads.maxOf { measurer.measure(it, style, maxLines = 1).size.width }
+    val gap = with(LocalDensity.current) { (widest.toDp() + LEAD_GAP) }
+    return gap.coerceIn(MIN_LEAD, (PANEL_WIDTH_DP / 2).dp)
+}
+
+private val MIN_LEAD = 64.dp
+private val LEAD_GAP = 8.dp
+
+@Composable
+private fun LineRow(line: Glance.Line, leadWidth: Dp) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (line.lead != null) {
             TextMMD(
@@ -289,7 +311,8 @@ private fun LineRow(line: Glance.Line) {
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
-                modifier = Modifier.width(64.dp),
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.width(leadWidth),
             )
         }
         TextMMD(

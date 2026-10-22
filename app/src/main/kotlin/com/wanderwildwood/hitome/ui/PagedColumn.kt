@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -54,6 +55,11 @@ import kotlinx.coroutines.launch
  *
  * Inside a [ListJumpBox] the letters and page dots move the same [state], and the next swipe
  * goes on from wherever they left it.
+ *
+ * [onPullAtTop] is for a list fed from somewhere else: a swipe down while the first page is
+ * already showing, its first row at the very top, calls it once for that swipe, so the list can
+ * ask for its rows again. Left null, as in a list that lives only on the phone, that swipe does
+ * nothing, as it always did. Saying what the pull set going is the caller's, in words.
  */
 @Composable
 fun PagedColumn(
@@ -63,9 +69,13 @@ fun PagedColumn(
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
     @Suppress("UNUSED_PARAMETER") isScrollbarVisible: Boolean = false,
+    onPullAtTop: (() -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    // The gesture below is set up once for the list; read the caller's latest action, not the
+    // one it was handed first.
+    val pull by rememberUpdatedState(onPullAtTop)
     val surface = MaterialTheme.colorScheme.surface
     val direction = LocalLayoutDirection.current
     val mark = with(LocalDensity.current) { TAIL_MARK_PX.toDp() }
@@ -91,6 +101,11 @@ fun PagedColumn(
         // Room after the last row for it to come to the top, so the list never has to line
         // its end up with the bottom of the screen.
         val tail = maxHeight
+        // Read once here, in composition, not inside the LazyColumn's content below: there it ran
+        // under the list's own item-provider state and so read the last layout, and every layout
+        // rebuilt the items and asked for another — about 60 redraws a second while idle, and with
+        // an accessibility service on (inkOS has one) a core kept busy in the background.
+        val paged = pages
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -103,7 +118,13 @@ fun PagedColumn(
                     ) { _, drag ->
                         if (turned || drag == 0f) return@detectVerticalDragGestures
                         turned = true
-                        scope.launch { if (drag < 0) state.pageForward() else state.pageBack() }
+                        val atTop = state.firstVisibleItemIndex == 0 && state.firstVisibleItemScrollOffset == 0
+                        when (swipeTurn(drag, atTop, pull != null)) {
+                            SwipeTurn.Forward -> scope.launch { state.pageForward() }
+                            SwipeTurn.Back -> scope.launch { state.pageBack() }
+                            SwipeTurn.Pull -> pull?.invoke()
+                            SwipeTurn.None -> Unit
+                        }
                     }
                 }
                 .drawWithContent {
@@ -117,7 +138,7 @@ fun PagedColumn(
             contentPadding = PaddingValues(
                 start = contentPadding.calculateStartPadding(direction),
                 end = contentPadding.calculateEndPadding(direction),
-                bottom = if (pages) mark else 0.dp,
+                bottom = if (paged) mark else 0.dp,
             ),
             verticalArrangement = verticalArrangement,
             horizontalAlignment = horizontalAlignment,
@@ -125,12 +146,27 @@ fun PagedColumn(
             userScrollEnabled = false,
         ) {
             content()
-            if (pages) item(key = TAIL, contentType = TAIL) { Spacer(Modifier.height(tail)) }
+            if (paged) item(key = TAIL, contentType = TAIL) { Spacer(Modifier.height(tail)) }
         }
     }
 }
 
 private const val TAIL = "paged-column-tail"
+
+/** What one swipe does to the list. */
+internal enum class SwipeTurn { Forward, Back, Pull, None }
+
+/**
+ * What a swipe of [drag] pixels does: up turns a page on, down turns one back, and down on the
+ * first page, [atTop], asks for the rows again if the list [canPull], or else does nothing.
+ */
+internal fun swipeTurn(drag: Float, atTop: Boolean, canPull: Boolean): SwipeTurn = when {
+    drag < 0f -> SwipeTurn.Forward
+    drag == 0f -> SwipeTurn.None
+    !atTop -> SwipeTurn.Back
+    canPull -> SwipeTurn.Pull
+    else -> SwipeTurn.None
+}
 
 /** The padding after the tail, in pixels; ListJump knows a paged list by it. */
 private const val TAIL_MARK_PX = 1
