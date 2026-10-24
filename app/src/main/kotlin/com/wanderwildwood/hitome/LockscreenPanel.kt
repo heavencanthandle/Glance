@@ -102,10 +102,17 @@ class LockscreenPanel(private val service: AccessibilityService) :
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            // Read afresh on every wake, so the panel is never older than the last look.
+            // Read afresh on a wake only when the last read is old or the chosen apps changed
+            // (this fork; see ReadPacing): asking every app on every wake kept them all in memory.
+            // An app with new lines says so through [changes] and is read at once regardless.
             if (intent.action == Intent.ACTION_SCREEN_ON) {
-                readAll()
-                bringUpToDate()
+                val now = SystemClock.elapsedRealtime()
+                if (ReadPacing.wakeReads(now, lastReadAt, lastReadSources, sourcesKey())) {
+                    readAll()
+                    bringUpToDate()
+                } else {
+                    watchAll()
+                }
             }
             // A new look at the lock screen: whether its items can be read is learned afresh.
             if (intent.action == Intent.ACTION_SCREEN_OFF) {
@@ -183,9 +190,19 @@ class LockscreenPanel(private val service: AccessibilityService) :
         }
     }
 
+    /** The apps shown and whether each is switched on, to tell when the choice has changed. */
+    private fun sourcesKey(): List<String> =
+        Glance.order(service).map { if (Glance.switchedOn(service, it)) "+$it" else "-$it" }
+
+    /** When the apps were last asked, and which were asked: see [ReadPacing]. */
+    private var lastReadAt = 0L
+    private var lastReadSources: List<String>? = null
+
     private fun readAll() {
         watchAll()
         val s = scope ?: return
+        lastReadAt = SystemClock.elapsedRealtime()
+        lastReadSources = sourcesKey()
         reading?.cancel()
         reading = s.launch {
             val (lines, phase) = withContext(Dispatchers.IO) {
@@ -197,7 +214,11 @@ class LockscreenPanel(private val service: AccessibilityService) :
         }
     }
 
-    /** Almanac's phase, read with the lines and again as each minute begins. */
+    /**
+     * Almanac's phase, read with the lines and again on each half hour of the clock. It used to
+     * be every minute, which kept Almanac running for it; the phase hardly moves in half an
+     * hour (this fork; see ReadPacing).
+     */
     private val moonPhase = mutableStateOf<Moon.Phase?>(null)
 
     private val minute = Runnable {
@@ -207,8 +228,7 @@ class LockscreenPanel(private val service: AccessibilityService) :
 
     private fun scheduleMinute() {
         handler.removeCallbacks(minute)
-        val wait = 60_000L - (System.currentTimeMillis() % 60_000L)
-        handler.postDelayed(minute, wait.coerceAtLeast(1_000L))
+        handler.postDelayed(minute, ReadPacing.untilNextMoon(System.currentTimeMillis()))
     }
 
     private fun readMoon() {
